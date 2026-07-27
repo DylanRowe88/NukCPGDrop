@@ -12,6 +12,9 @@ public class DropConfiguration
     public Difficulty Difficulty { get; set; } = Difficulty.Short;
     public bool DoubleDrop { get; set; } = false;
     public int DropCount { get; set; } = 0;
+    public int CustomInterval { get; set; } = 2000;
+    public int RangeMin { get; set; } = 300;
+    public int RangeMax { get; set; } = 2000;
 }
 
 public class SystemStatus
@@ -21,6 +24,9 @@ public class SystemStatus
     public int DropCount { get; set; }
     public bool[] Held { get; set; } = new bool[6];
     public bool Pca9685Present { get; set; }
+    public int CustomInterval { get; set; }
+    public int RangeMin { get; set; }
+    public int RangeMax { get; set; }
 }
 
 public class DropCommand

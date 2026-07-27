@@ -20,6 +20,9 @@ public class ApiServiceTests
             DropCount = 5,
             Held = new[] { true, true, true, true, true, true },
             Pca9685Present = true,
+            CustomInterval = 2000,
+            RangeMin = 300,
+            RangeMax = 2000,
         };
 
         var http = CreateMockHttpClient(expected);

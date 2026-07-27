@@ -1,76 +1,193 @@
 @using NukCPGDrop.Ui.Models
 
 <div class="difficulty-selector">
-    <h3>Difficulty</h3>
-    <div class="button-group">
-        @foreach (var opt in difficulties)
-        {
-            <button class="diff-btn @(Selected == opt.Value ? "active" : "")"
-                    @onclick="() => Select(opt.Value)">
-                @opt.Label
-            </button>
-        }
+    <div class="slider-row">
+        <span class="slider-label">Interval</span>
+        <span class="slider-value">@Interval ms</span>
     </div>
+    <input type="range" class="interval-slider"
+           min="@MinInterval" max="@MaxInterval" step="100"
+           value="@Interval"
+           @onchange="OnIntervalSliderChanged" />
 
     <label class="toggle-row">
-        <span>Double Drop</span>
+        <input type="checkbox" checked="@RandomEnabled"
+               @onchange="OnRandomToggle" />
+        <span>Random</span>
+    </label>
+
+    @if (RandomEnabled)
+    {
+        <div class="range-row">
+            <span class="range-label">Range:</span>
+            <span class="range-value">@RangeMin – @RangeMax ms</span>
+        </div>
+        <div class="range-sliders">
+            <div class="range-slider-group">
+                <span class="range-sub">Min</span>
+                <input type="range" min="@MinInterval" max="@MaxInterval" step="100"
+                       value="@RangeMin" @onchange="OnRangeMinChanged" />
+            </div>
+            <div class="range-slider-group">
+                <span class="range-sub">Max</span>
+                <input type="range" min="@MinInterval" max="@MaxInterval" step="100"
+                       value="@RangeMax" @onchange="OnRangeMaxChanged" />
+            </div>
+        </div>
+    }
+
+    <label class="toggle-row">
         <input type="checkbox" checked="@DoubleDrop"
-               @onchange="OnToggleDoubleDrop" />
+               @onchange="OnDoubleDropToggle" />
+        <span>Double Drop</span>
     </label>
 </div>
 
 @code {
-    [Parameter] public Difficulty Selected { get; set; }
+    [Parameter] public int MinInterval { get; set; } = 100;
+    [Parameter] public int MaxInterval { get; set; } = 3000;
+    [Parameter] public int Interval { get; set; } = 2000;
+    [Parameter] public bool RandomEnabled { get; set; }
+    [Parameter] public int RangeMin { get; set; } = 300;
+    [Parameter] public int RangeMax { get; set; } = 2000;
     [Parameter] public bool DoubleDrop { get; set; }
-    [Parameter] public EventCallback<Difficulty> OnDifficultyChanged { get; set; }
+
+    [Parameter] public EventCallback<int> IntervalChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnRandomToggled { get; set; }
+    [Parameter] public EventCallback<(int Min, int Max)> OnRangeChanged { get; set; }
     [Parameter] public EventCallback<bool> OnDoubleDropChanged { get; set; }
 
-    private record Option(string Label, Difficulty Value);
-
-    private readonly Option[] difficulties = new Option[]
+    private async Task OnIntervalSliderChanged(ChangeEventArgs e)
     {
-        new("Long",  Difficulty.Long),
-        new("Short", Difficulty.Short),
-        new("Random", Difficulty.Random),
-    };
-
-    private async Task Select(Difficulty d)
-    {
-        Selected = d;
-        await OnDifficultyChanged.InvokeAsync(d);
+        if (int.TryParse(e.Value?.ToString(), out var val))
+            await IntervalChanged.InvokeAsync(val);
     }
 
-    private async Task OnToggleDoubleDrop(ChangeEventArgs e)
+    private async Task OnRandomToggle(ChangeEventArgs e)
     {
-        if (e.Value is bool val)
-            await OnDoubleDropChanged.InvokeAsync(val);
+        var val = e.Value is true;
+        await OnRandomToggled.InvokeAsync(val);
+    }
+
+    private async Task OnRangeMinChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val) && val <= RangeMax)
+            await OnRangeChanged.InvokeAsync((val, RangeMax));
+    }
+
+    private async Task OnRangeMaxChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val) && val >= RangeMin)
+            await OnRangeChanged.InvokeAsync((RangeMin, val));
+    }
+
+    private async Task OnDoubleDropToggle(ChangeEventArgs e)
+    {
+        var val = e.Value is true;
+        await OnDoubleDropChanged.InvokeAsync(val);
     }
 }
 
 <style>
-    .difficulty-selector { margin: 1rem 0; }
-    .button-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .diff-btn {
-        flex: 1;
-        min-width: 80px;
-        padding: 0.6rem 1.2rem;
-        border: 2px solid var(--border-color, #ccc);
-        border-radius: 8px;
-        background: var(--bg-color, #fff);
-        font-size: clamp(0.85rem, 2.5vw, 1rem);
-        cursor: pointer;
-        transition: all 0.2s;
+    .difficulty-selector {
+        margin: 0.5rem 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
     }
-    .diff-btn.active {
+    .slider-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .slider-label {
+        font-size: clamp(0.75rem, 2vw, 0.9rem);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text-muted, #888);
+    }
+    .slider-value {
+        font-size: clamp(0.8rem, 2.2vw, 1rem);
+        font-weight: 700;
+        color: var(--accent-color, #e63946);
+    }
+    .interval-slider {
+        width: 100%;
+        height: 6px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: var(--border-color, #333);
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+    }
+    .interval-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
         background: var(--accent-color, #e63946);
-        color: #fff;
-        border-color: var(--accent-color, #e63946);
+        cursor: pointer;
     }
     .toggle-row {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        margin-top: 0.75rem;
-        font-size: clamp(0.85rem, 2.5vw, 1rem);
+        gap: 0.5rem;
+        font-size: clamp(0.75rem, 2vw, 0.9rem);
+        cursor: pointer;
+    }
+    .toggle-row input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent-color, #e63946);
+        cursor: pointer;
+    }
+    .range-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .range-label {
+        font-size: clamp(0.7rem, 1.8vw, 0.85rem);
+        color: var(--text-muted, #888);
+    }
+    .range-value {
+        font-size: clamp(0.75rem, 2vw, 0.9rem);
+        font-weight: 600;
+        color: var(--accent-color, #e63946);
+    }
+    .range-sliders {
+        display: flex;
+        gap: 1rem;
+    }
+    .range-slider-group {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+    .range-sub {
+        font-size: clamp(0.6rem, 1.5vw, 0.75rem);
+        color: var(--text-muted, #888);
+        text-transform: uppercase;
+    }
+    .range-slider-group input[type="range"] {
+        width: 100%;
+        height: 5px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: var(--border-color, #333);
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+    }
+    .range-slider-group input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent-color, #e63946);
+        cursor: pointer;
     }
 </style>

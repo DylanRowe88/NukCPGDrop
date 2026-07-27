@@ -22,6 +22,9 @@ typedef struct {
   uint32_t drop_count;
   uint8_t last_sequence[6];
   uint8_t last_completed;
+  uint32_t custom_interval;
+  uint32_t range_min;
+  uint32_t range_max;
 } nukcpgdrop_state_t;
 
 extern nukcpgdrop_state_t g_state;

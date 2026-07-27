@@ -2,36 +2,43 @@ using Xunit;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using NukCPGDrop.Ui.Components;
-using NukCPGDrop.Ui.Models;
 
 namespace NukCPGDrop.Ui.Tests.Components;
 
 public class DifficultySelectorTests : TestContext
 {
     [Fact]
-    public void DifficultySelector_HighlightsActive()
+    public void DifficultySelector_RendersIntervalSlider()
     {
         var cut = RenderComponent<DifficultySelector>(p => p
-            .Add(s => s.Selected, Difficulty.Short)
+            .Add(s => s.Interval, 1000)
         );
 
-        var buttons = cut.FindAll(".diff-btn");
-        Assert.Equal(3, buttons.Count);
-        Assert.Contains(buttons, b => b.ClassList.Contains("active"));
+        var slider = cut.Find(".interval-slider");
+        Assert.NotNull(slider);
     }
 
     [Fact]
-    public void DifficultySelector_FiresOnChanged()
+    public void DifficultySelector_RendersDoubleDropToggle()
     {
-        Difficulty selected = Difficulty.Long;
         var cut = RenderComponent<DifficultySelector>(p => p
-            .Add(s => s.Selected, Difficulty.Long)
-            .Add(s => s.OnDifficultyChanged,
-                 EventCallback.Factory.Create<Difficulty>(this, (d) => selected = d))
+            .Add(s => s.DoubleDrop, true)
         );
 
-        var buttons = cut.FindAll(".diff-btn");
-        buttons[2].Click();
-        Assert.Equal(Difficulty.Random, selected);
+        var checkbox = cut.Find("input[type='checkbox']");
+        Assert.NotNull(checkbox);
+    }
+
+    [Fact]
+    public void DifficultySelector_TogglesRandomRange()
+    {
+        var cut = RenderComponent<DifficultySelector>(p => p
+            .Add(s => s.RandomEnabled, true)
+            .Add(s => s.RangeMin, 300)
+            .Add(s => s.RangeMax, 2000)
+        );
+
+        var rangeLabels = cut.FindAll(".range-value");
+        Assert.NotEmpty(rangeLabels);
     }
 }

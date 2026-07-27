@@ -9,7 +9,7 @@ nukcpgdrop_state_t g_state;
 
 static const char *TAG = "state";
 
-static const uint32_t interval_map[3] = {
+static uint32_t interval_map[3] = {
     [DIFFICULTY_LONG] = 2000,
     [DIFFICULTY_SHORT] = 500,
     [DIFFICULTY_RANDOM] = 0,
@@ -37,6 +37,9 @@ esp_err_t state_init(void) {
   if (ret != ESP_OK) {
     memset(&g_state, 0, sizeof(g_state));
     g_state.difficulty = DIFFICULTY_SHORT;
+    g_state.custom_interval = 2000;
+    g_state.range_min = 300;
+    g_state.range_max = 2000;
   }
 
   nvs_close(handle);
@@ -87,7 +90,10 @@ void state_save_sequence(const uint8_t *order, uint8_t completed) {
 
 uint32_t state_get_drop_interval_ms(difficulty_t diff) {
   if (diff == DIFFICULTY_RANDOM) {
-    return 300 + (rand() % 1700);
+    uint32_t range = g_state.range_max - g_state.range_min;
+    return g_state.range_min + (rand() % (range + 1));
   }
+  if (g_state.custom_interval > 0)
+    return g_state.custom_interval;
   return interval_map[diff];
 }

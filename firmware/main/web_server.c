@@ -70,6 +70,9 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddItemToObject(root, "held", held);
 
   cJSON_AddBoolToObject(root, "pca9685_present", g_pca9685_present);
+  cJSON_AddNumberToObject(root, "custom_interval", g_state.custom_interval);
+  cJSON_AddNumberToObject(root, "range_min", g_state.range_min);
+  cJSON_AddNumberToObject(root, "range_max", g_state.range_max);
 
   const char *json = cJSON_Print(root);
   httpd_resp_set_type(req, "application/json");
@@ -137,6 +140,19 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
   if (cJSON_IsBool(dd))
     state_set_double_drop(cJSON_IsTrue(dd));
 
+  cJSON *ci = cJSON_GetObjectItem(json, "custom_interval");
+  if (cJSON_IsNumber(ci))
+    g_state.custom_interval = (uint32_t)ci->valuedouble;
+
+  cJSON *rmin = cJSON_GetObjectItem(json, "range_min");
+  if (cJSON_IsNumber(rmin))
+    g_state.range_min = (uint32_t)rmin->valuedouble;
+
+  cJSON *rmax = cJSON_GetObjectItem(json, "range_max");
+  if (cJSON_IsNumber(rmax))
+    g_state.range_max = (uint32_t)rmax->valuedouble;
+
+  state_save();
   cJSON_Delete(json);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
