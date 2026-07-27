@@ -207,17 +207,15 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
   return ESP_FAIL;
 }
 
-// ── URI handlers ─────────────────────────────────────────────────
+// ── Catch-all: any unmatched URI -> serve embedded assets ───────
 
-static esp_err_t root_handler(httpd_req_t *req) {
+static esp_err_t catch_all_handler(httpd_req_t *req) {
+  // Captive portal probes redirect to /
+  if (is_captive_probe(req->uri))
+    return redirect_to_portal(req);
+
+  // Try to serve from embedded assets
   return wildcard_handler(req);
-}
-
-static esp_err_t captive_redirect_handler(httpd_req_t *req) {
-  httpd_resp_set_status(req, "302 Found");
-  httpd_resp_set_hdr(req, "Location", "/");
-  httpd_resp_send(req, NULL, 0);
-  return ESP_OK;
 }
 
 // ── URI registration ─────────────────────────────────────────────
@@ -228,65 +226,21 @@ static const httpd_uri_t api_uris[] = {
     {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_handler},
 };
 
-static const httpd_uri_t portal_uris[] = {
-    {.uri = "/hotspot-detect.html",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/generate_204",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/connecttest.txt",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/check_network_status.txt",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/ncsi.txt",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/fwlink", .method = HTTP_GET, .handler = captive_redirect_handler},
-    {.uri = "/success.txt",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/canonical.html",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/gen_204",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-    {.uri = "/redirect",
-     .method = HTTP_GET,
-     .handler = captive_redirect_handler},
-};
-
 esp_err_t web_server_start(void) {
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-  cfg.max_uri_handlers = 32;
+  cfg.max_uri_handlers = 24;
   cfg.stack_size = 8192;
   cfg.lru_purge_enable = true;
 
   ESP_RETURN_ON_ERROR(httpd_start(&g_server, &cfg), TAG, "httpd start");
 
-  // API routes
+  // API routes (exact match, highest priority)
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // Captive portal detection probes -- these are hit by OS before any
-  // browser URL is typed, and must redirect to the portal page.
-  for (size_t i = 0; i < sizeof(portal_uris) / sizeof(portal_uris[0]); i++)
-    httpd_register_uri_handler(g_server, &portal_uris[i]);
-
-  // Root path -- serves the Blazor WASM app
-  httpd_uri_t root = {.uri = "/", .method = HTTP_GET, .handler = root_handler};
-  httpd_register_uri_handler(g_server, &root);
-
-  // Wildcard catch-all for static assets
-  httpd_uri_t wildcard = {
-      .uri = "/*", .method = HTTP_GET, .handler = wildcard_handler};
-  httpd_uri_t wpost = {
-      .uri = "/*", .method = HTTP_POST, .handler = wildcard_handler};
-  httpd_register_uri_handler(g_server, &wildcard);
-  httpd_register_uri_handler(g_server, &wpost);
+  // Register a custom 404 handler for ALL unmatched URIs.
+  // This catches everything: /css/app.css, /_framework/*, /favicon.ico, etc.
+  httpd_register_err_handler(g_server, HTTPD_404_NOT_FOUND, catch_all_handler);
 
   ESP_LOGI(TAG, "HTTP server running on :80 (%u assets embedded)",
            web_assets_count);
