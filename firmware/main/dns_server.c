@@ -10,68 +10,74 @@
 #define DNS_MAX_QUERY 512
 #define DNS_HEADER_LEN 12
 
-typedef struct __attribute__((packed)) {
-  uint16_t id;
-  uint16_t flags;
-  uint16_t qdcount;
-  uint16_t ancount;
-  uint16_t nscount;
-  uint16_t arcount;
-} dns_header_t;
-
 static const char *TAG = "dns";
 static TaskHandle_t g_dns_task = NULL;
 
-static void dns_reply_to_esp_ip(uint8_t *buffer, size_t len) {
-  if (len < DNS_HEADER_LEN)
-    return;
-
-  // Minimal DNS response: set QR bit, echo query, append A-record answer
-  // pointing to 192.168.4.1 (c0 a8 04 01)
-  uint8_t response[128] = {0};
+static void dns_reply_a(uint8_t *buf, size_t *len) {
+  // Build a proper DNS response with one A-record answer.
+  // We reuse buf for the response (it's large enough at 512 bytes)
+  uint8_t resp[DNS_MAX_QUERY];
   size_t rlen = 0;
 
-  // Copy query ID and set response flag
-  memcpy(response, buffer, 2);
-  response[2] = 0x81;
-  response[3] = 0x80;
-  // QDCOUNT = 1, ANCOUNT = 1
-  response[4] = 0x00;
-  response[5] = 0x01;
-  response[6] = 0x00;
-  response[7] = 0x01;
+  // Header: copy ID, set QR=1 OPCODE=0 AA=1, set RA=1, RCODE=0
+  resp[0] = buf[0];
+  resp[1] = buf[1]; // ID
+  resp[2] = 0x85;   // QR|AA
+  resp[3] = 0x80;   // RA
+  // QDCOUNT=1, ANCOUNT=1, NSCOUNT=0, ARCOUNT=0
+  resp[4] = 0x00;
+  resp[5] = 0x01;
+  resp[6] = 0x00;
+  resp[7] = 0x01;
+  resp[8] = 0x00;
+  resp[9] = 0x00;
+  resp[10] = 0x00;
+  resp[11] = 0x00;
   rlen = 12;
 
-  // Echo the original question
+  // Copy the question section verbatim
   size_t qlen = 12;
-  while (qlen < len && buffer[qlen] != 0) {
-    uint8_t label_len = buffer[qlen];
-    qlen += 1 + label_len;
+  while (qlen < *len) {
+    uint8_t c = buf[qlen];
+    if (c == 0) {
+      qlen += 5; // null label + QTYPE(2) + QCLASS(2)
+      break;
+    }
+    if ((c & 0xC0) == 0xC0) {
+      qlen += 4; // compression ptr(2) + QTYPE(2) + QCLASS(2)
+      break;
+    }
+    qlen += 1 + c;
   }
-  qlen += 5; // skip null + QTYPE + QCLASS
-  memcpy(response + rlen, buffer + 12, qlen - 12);
-  rlen += qlen - 12;
+  size_t question_len = qlen - 12;
+  memcpy(resp + rlen, buf + 12, question_len);
+  rlen += question_len;
 
-  // Answer: type A, class IN, TTL 60s, IP 192.168.4.1
-  uint16_t p = htons(0xC00C); // pointer to query name
-  memcpy(response + rlen, &p, 2);
-  rlen += 2;
-  response[rlen++] = 0x00;
-  response[rlen++] = 0x01; // A record
-  response[rlen++] = 0x00;
-  response[rlen++] = 0x01; // IN class
-  response[rlen++] = 0x00;
-  response[rlen++] = 0x00;
-  response[rlen++] = 0x00;
-  response[rlen++] = 0x3C; // TTL 60
-  response[rlen++] = 0x00;
-  response[rlen++] = 0x04; // data len = 4
-  response[rlen++] = 192;
-  response[rlen++] = 168;
-  response[rlen++] = 4;
-  response[rlen++] = 1;
+  // Answer: name compression pointer to question
+  resp[rlen++] = 0xC0;
+  resp[rlen++] = 0x0C;
+  // Type A
+  resp[rlen++] = 0x00;
+  resp[rlen++] = 0x01;
+  // Class IN
+  resp[rlen++] = 0x00;
+  resp[rlen++] = 0x01;
+  // TTL 60 seconds
+  resp[rlen++] = 0x00;
+  resp[rlen++] = 0x00;
+  resp[rlen++] = 0x00;
+  resp[rlen++] = 0x3C;
+  // Data length 4 bytes
+  resp[rlen++] = 0x00;
+  resp[rlen++] = 0x04;
+  // IP 192.168.4.1
+  resp[rlen++] = 192;
+  resp[rlen++] = 168;
+  resp[rlen++] = 4;
+  resp[rlen++] = 1;
 
-  memcpy(buffer, response, rlen);
+  memcpy(buf, resp, rlen);
+  *len = rlen;
 }
 
 static void dns_task(void *arg) {
@@ -88,7 +94,17 @@ static void dns_task(void *arg) {
     return;
   }
 
-  bind(sock, (struct sockaddr *)&addr, sizeof(addr));
+  int opt = 1;
+  setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    ESP_LOGE(TAG, "bind failed — port 53 already in use?");
+    close(sock);
+    vTaskDelete(NULL);
+    return;
+  }
+
+  ESP_LOGI(TAG, "DNS server listening on port 53");
 
   uint8_t buf[DNS_MAX_QUERY];
   struct sockaddr_in client;
@@ -97,12 +113,13 @@ static void dns_task(void *arg) {
   while (1) {
     int len = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&client,
                        &client_len);
-    if (len < 0)
+    if (len <= 0)
       continue;
 
-    if ((buf[2] & 0x80) == 0) { // standard query
-      dns_reply_to_esp_ip(buf, len);
-      sendto(sock, buf, 128, 0, (struct sockaddr *)&client, client_len);
+    // Only respond to standard queries (QR=0)
+    if ((buf[2] & 0x80) == 0) {
+      dns_reply_a(buf, &len);
+      sendto(sock, buf, len, 0, (struct sockaddr *)&client, client_len);
     }
   }
 
