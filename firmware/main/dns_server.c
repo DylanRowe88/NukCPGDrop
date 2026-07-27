@@ -118,8 +118,9 @@ static void dns_task(void *arg) {
 
     // Only respond to standard queries (QR=0)
     if ((buf[2] & 0x80) == 0) {
-      dns_reply_a(buf, &len);
-      sendto(sock, buf, len, 0, (struct sockaddr *)&client, client_len);
+      size_t reply_len = (size_t)(len > 0 ? len : 0);
+      dns_reply_a(buf, &reply_len);
+      sendto(sock, buf, reply_len, 0, (struct sockaddr *)&client, client_len);
     }
   }
 
