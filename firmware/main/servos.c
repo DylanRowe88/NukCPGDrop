@@ -29,7 +29,7 @@ esp_err_t servos_init(void) {
       .addr = PCA9685_I2C_ADDR_BASE,
       .sda_gpio = 8,
       .scl_gpio = 9,
-      .clk_speed = 400000,
+      .clk_speed = 100000,
   };
 
   esp_err_t ret = pca9685_init(&g_pca, &cfg);

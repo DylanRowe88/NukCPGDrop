@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "led.h"
 #include "mdns.h"
 #include "pca9685.h"
 #include "servos.h"
@@ -15,6 +16,14 @@
 static const char *TAG = "nukcpgdrop";
 bool g_pca9685_present = false;
 
+static void set_system_led(void) {
+  if (g_pca9685_present) {
+    led_set_color(LED_GREEN);
+  } else {
+    led_set_color(LED_BLUE);
+  }
+}
+
 static void start_mdns(void) {
   mdns_init();
   mdns_hostname_set("nukcpgdrop");
@@ -25,6 +34,9 @@ static void start_mdns(void) {
 
 void app_main(void) {
   ESP_LOGI(TAG, "NukCPGDrop starting...");
+
+  // Init RGB LED first for boot feedback
+  led_init(48);
 
   ESP_ERROR_CHECK(state_init());
   ESP_LOGI(TAG, "state loaded (difficulty=%d, drops=%lu)", g_state.difficulty,
@@ -38,8 +50,7 @@ void app_main(void) {
     ESP_LOGW(TAG, "PCA9685 not found — continuing in headless mode");
   }
 
-  gpio_set_direction(GPIO_NUM_10, GPIO_MODE_OUTPUT);
-  gpio_set_level(GPIO_NUM_10, g_pca9685_present);
+  set_system_led();
 
   ESP_ERROR_CHECK(wifi_ap_start());
   start_mdns();

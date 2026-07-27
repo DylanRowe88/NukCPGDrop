@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         main.c
+        led.c
         pca9685.c
         servos.c
         state.c

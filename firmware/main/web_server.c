@@ -232,7 +232,7 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
 
 // ── Catch-all: any unmatched URI -> serve embedded assets ───────
 
-static esp_err_t catch_all_handler(httpd_req_t *req) {
+static esp_err_t catch_all_handler(httpd_req_t *req, httpd_err_code_t err) {
   // Captive portal probes redirect to /
   if (is_captive_probe(req->uri))
     return redirect_to_portal(req);
