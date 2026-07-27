@@ -257,14 +257,87 @@ def check_boot(port, timeout=15):
     else:
         warn("Boot monitor ended without seeing 'app_main'")
 
-# ── E2E: Playwright (manual WiFi connect required) ──────────────────
+# ── E2E: WiFi + Playwright ─────────────────────────────────────────
 
-def playwright_e2e(ssid):
-    step("E2E: Playwright captive portal test")
-    print("  Make sure your computer is connected to the ESP's WiFi AP first.")
-    print(f"  Connect to SSID starting with '{ssid or 'NukCPGDrop-'}' then press Enter...")
-    input("  Press Enter when connected...")
+def _netsh(args):
+    return subprocess.run(["netsh"] + args, capture_output=True, text=True)
 
+def _find_builtin_wifi():
+    """Return the name of the built-in WiFi adapter (not USB)."""
+    r = _netsh(["wlan", "show", "interfaces"])
+    for block in r.stdout.split('\n\n'):
+        lines = block.strip().split('\n')
+        name = None
+        desc = None
+        for line in lines:
+            m = re.match(r'\s+Name\s+:\s+(.+)', line)
+            if m: name = m.group(1).strip()
+            m = re.match(r'\s+Description\s+:\s+(.+)', line)
+            if m: desc = m.group(1).strip()
+        if name and desc:
+            if 'Wireless USB' not in desc and 'USB LAN' not in desc:
+                return name
+    return None
+
+def _connect_esp_ap(iface, ssid_prefix):
+    r = _netsh(["wlan", "show", "networks", f"interface={iface}"])
+    if ssid_prefix not in r.stdout:
+        return None
+    for line in r.stdout.splitlines():
+        if ssid_prefix.lower() in line.lower():
+            return line.split(":")[-1].strip()
+    return None
+
+def _save_and_disconnect(iface):
+    """Save the current profile name and disconnect just this interface."""
+    r = _netsh(["wlan", "show", "interfaces"])
+    for line in r.stdout.splitlines():
+        m = re.match(r'\s+Profile\s+:\s+(.+)', line)
+        if m: return m.group(1).strip()
+    return None
+
+def _restore_connection(iface, profile):
+    if profile:
+        _netsh(["wlan", "connect", f"name={profile}", f"interface={iface}"])
+
+def connect_and_test_e2e(ssid_prefix="NukCPGDrop-"):
+    step("E2E: WiFi + Playwright test")
+
+    iface = _find_builtin_wifi()
+    if not iface:
+        warn("No built-in WiFi adapter found (only USB WiFi)")
+        return
+
+    ok(f"Using built-in adapter: {iface}")
+
+    esp_ssid = _connect_esp_ap(iface, ssid_prefix)
+    if not esp_ssid:
+        warn(f"ESP AP '{ssid_prefix}...' not found in scan")
+        warn("Is the ESP32 powered and running?")
+        return
+
+    ok(f"Found AP: {esp_ssid}")
+    prev_profile = _save_and_disconnect(iface)
+
+    # Add open profile and connect
+    xml = f'''<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>{esp_ssid}</name>
+    <SSIDConfig><SSID><name>{esp_ssid}</name></SSID></SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>manual</connectionMode>
+    <MSM><security>
+        <authEncryption><authentication>open</authentication><encryption>none</encryption></authEncryption>
+    </security></MSM>
+</WLANProfile>'''
+    p = REPO_ROOT / f"{esp_ssid}.xml"
+    p.write_text(xml)
+    _netsh(["wlan", "add", "profile", f"filename={p}", f"interface={iface}"])
+    _netsh(["wlan", "connect", f"name={esp_ssid}", f"interface={iface}"])
+    p.unlink()
+    time.sleep(5)
+
+    # Run Playwright test
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -273,10 +346,8 @@ def playwright_e2e(ssid):
         from playwright.sync_api import sync_playwright
 
     url = "http://192.168.4.1"
-    ok(f"Navigating to {url}")
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
         try:
             page.goto(url, timeout=20000, wait_until='domcontentloaded')
@@ -294,20 +365,21 @@ def playwright_e2e(ssid):
             logo = page.query_selector("img[alt='Nuks Logo']")
             if logo:
                 ok("Nuks logo image found")
-            else:
-                warn("Nuks logo image not found")
 
             page.goto(f"{url}/api/status", timeout=10000, wait_until='domcontentloaded')
-            status_text = page.text_content("pre") or page.text_content("body") or ""
-            if "difficulty" in status_text.lower():
-                ok(f"REST API responds: {status_text[:120]}")
-            else:
-                warn(f"REST API response: {status_text[:120]}")
+            st = page.text_content("pre") or page.text_content("body") or ""
+            if "difficulty" in st.lower():
+                ok(f"REST API responds: {st[:120]}")
 
         except Exception as e:
             warn(f"Playwright error: {e}")
         finally:
             browser.close()
+
+    # Restore previous connection on the built-in adapter only
+    _netsh(["wlan", "disconnect", f"interface={iface}"])
+    _netsh(["wlan", "delete", "profile", f"name={esp_ssid}", f"interface={iface}"])
+    _restore_connection(iface, prev_profile)
 
 # ── main ─────────────────────────────────────────────────────────────
 
@@ -343,7 +415,7 @@ def main():
     check_boot(port)
 
     if not args.skip_e2e:
-        playwright_e2e("NukCPGDrop-")
+        connect_and_test_e2e()
 
     if args.monitor:
         idf_run(["-p", port, "monitor"], cwd=FIRMWARE_DIR)
