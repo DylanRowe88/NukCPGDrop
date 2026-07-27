@@ -81,14 +81,14 @@ def step(label):
     print(f"\n=== {label} ===")
 
 def warn(msg):
-    print(f"  ⚠ {msg}")
+    print(f"  [WARN] {msg}")
 
 def fail(msg):
-    print(f"  ✗ {msg}")
+    print(f"  [FAIL] {msg}")
     sys.exit(1)
 
 def ok(msg):
-    print(f"  ✓ {msg}")
+    print(f"  [OK] {msg}")
 
 # ── port detection ───────────────────────────────────────────────────
 
@@ -394,7 +394,7 @@ def main():
         from flash_serial import serial_monitor
         serial_monitor(port)
 
-    print("\n✓ NukCPGDrop — done")
+    print("\n[OK] NukCPGDrop — done")
 
 
 if __name__ == "__main__":
