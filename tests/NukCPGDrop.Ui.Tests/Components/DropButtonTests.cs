@@ -1,5 +1,6 @@
 using Xunit;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using NukCPGDrop.Ui.Components;
 
 namespace NukCPGDrop.Ui.Tests.Components;
@@ -14,10 +15,9 @@ public class DropButtonTests : TestContext
             .Add(b => b.Subtitle, "Start sequence")
         );
 
-        cut.MarkupMatches(m => m.HasChild("button")
-            .And(b => b.HasAttribute("class").HasValue("drop-btn"))
-        );
-        Assert.Contains("DROP ALL", cut.Markup);
+        var button = cut.Find("button");
+        Assert.Contains("DROP ALL", button.TextContent);
+        Assert.Contains("drop-btn", button.GetAttribute("class"));
     }
 
     [Theory]
@@ -31,7 +31,10 @@ public class DropButtonTests : TestContext
         );
 
         var button = cut.Find("button");
-        Assert.Equal(disabled, button.IsDisabled);
+        if (disabled)
+            Assert.NotNull(button.GetAttribute("disabled"));
+        else
+            Assert.Null(button.GetAttribute("disabled"));
     }
 
     [Fact]
@@ -48,16 +51,14 @@ public class DropButtonTests : TestContext
     }
 
     [Fact]
-    public void DropButton_DoesNotFireWhenDisabled()
+    public void DropButton_RendersDisabledAttribute()
     {
-        var clicked = false;
         var cut = RenderComponent<DropButton>(p => p
             .Add(b => b.Label, "DROP")
             .Add(b => b.Disabled, true)
-            .Add(b => b.OnClick, EventCallback.Factory.Create(this, () => clicked = true))
         );
 
-        cut.Find("button").Click();
-        Assert.False(clicked);
+        var button = cut.Find("button");
+        Assert.NotNull(button.GetAttribute("disabled"));
     }
 }

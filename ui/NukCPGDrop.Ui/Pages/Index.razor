@@ -1,5 +1,4 @@
 @page "/"
-@attribute [RenderModeWebAssembly]
 @implements IDisposable
 
 <PageTitle>NukCPGDrop</PageTitle>
@@ -55,7 +54,6 @@
     private int _dropCount;
     private bool _doubleDrop;
     private Timer? _pollTimer;
-    private Timer? _animTimer;
 
     private string DropSubtitle => _isRunning ? "Sequence in progress..." : "Start random sequence";
     private double ProgressPercent => _doubleDrop
@@ -131,16 +129,15 @@
         await Api.UpdateConfigAsync(State.Config);
     }
 
-    private async Task OnDoubleDropChanged(ChangeEventArgs e)
+    private async Task OnDoubleDropChanged(bool val)
     {
-        State.Config.DoubleDrop = (bool)(e.Value ?? false);
+        State.Config.DoubleDrop = val;
         await Api.UpdateConfigAsync(State.Config);
     }
 
     public void Dispose()
     {
         _pollTimer?.Dispose();
-        _animTimer?.Dispose();
     }
 }
 

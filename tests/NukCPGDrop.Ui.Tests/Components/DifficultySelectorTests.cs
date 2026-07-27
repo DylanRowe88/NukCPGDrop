@@ -1,5 +1,6 @@
 using Xunit;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using NukCPGDrop.Ui.Components;
 using NukCPGDrop.Ui.Models;
 
@@ -25,7 +26,8 @@ public class DifficultySelectorTests : TestContext
         Difficulty selected = Difficulty.Long;
         var cut = RenderComponent<DifficultySelector>(p => p
             .Add(s => s.Selected, Difficulty.Long)
-            .Add(s => s.OnDifficultyChanged, EventCallback.Factory.Create<Difficulty>(this, (d) => selected = d))
+            .Add(s => s.OnDifficultyChanged,
+                 EventCallback.Factory.Create<Difficulty>(this, (d) => selected = d))
         );
 
         var buttons = cut.FindAll(".diff-btn");

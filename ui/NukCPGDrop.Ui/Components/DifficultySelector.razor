@@ -15,7 +15,7 @@
     <label class="toggle-row">
         <span>Double Drop</span>
         <input type="checkbox" checked="@DoubleDrop"
-               @onchange="OnDoubleDropChanged" />
+               @onchange="OnToggleDoubleDrop" />
     </label>
 </div>
 
@@ -27,7 +27,7 @@
 
     private record Option(string Label, Difficulty Value);
 
-    private readonly Option[] difficulties = new[]
+    private readonly Option[] difficulties = new Option[]
     {
         new("Long",  Difficulty.Long),
         new("Short", Difficulty.Short),
@@ -38,6 +38,12 @@
     {
         Selected = d;
         await OnDifficultyChanged.InvokeAsync(d);
+    }
+
+    private async Task OnToggleDoubleDrop(ChangeEventArgs e)
+    {
+        if (e.Value is bool val)
+            await OnDoubleDropChanged.InvokeAsync(val);
     }
 }
 
