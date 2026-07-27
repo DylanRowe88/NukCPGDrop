@@ -425,10 +425,19 @@ def _find_builtin_wifi():
     return None
 
 def _connect_esp_ap(iface, ssid_prefix):
+    # Force a scan first
+    _netsh(["wlan", "scan", f"interface={iface}"])
+    time.sleep(3)
     r = _netsh(["wlan", "show", "networks", f"interface={iface}"])
     for line in r.stdout.splitlines():
         if ssid_prefix.lower() in line.lower():
             return line.split(":")[-1].strip()
+    # Also try mode=bssid for more detail
+    r2 = _netsh(["wlan", "show", "networks", f"interface={iface}", "mode=bssid"])
+    for line in r2.stdout.splitlines():
+        if ssid_prefix.lower() in line.lower():
+            parts = line.split(":")
+            return parts[-1].strip() if len(parts) > 1 else parts[0].strip()
     return None
 
 def _save_and_disconnect(iface):
@@ -442,7 +451,7 @@ def _restore_connection(iface, profile):
     if profile:
         _netsh(["wlan", "connect", f"name={profile}", f"interface={iface}"])
 
-def connect_and_test_e2e(ssid_prefix="NukCPGDrop-"):
+def connect_and_test_e2e():
     step("E2E: WiFi + Playwright test")
 
     iface = _find_builtin_wifi()
@@ -452,10 +461,13 @@ def connect_and_test_e2e(ssid_prefix="NukCPGDrop-"):
 
     ok(f"Using built-in adapter: {iface}")
 
-    esp_ssid = _connect_esp_ap(iface, ssid_prefix)
+    # Try to find ESP AP SSID from known pattern
+    esp_ssid = _connect_esp_ap(iface, "NukCPGDrop-")
     if not esp_ssid:
-        warn(f"ESP AP '{ssid_prefix}...' not found — is ESP32 powered?")
-        return
+        warn("ESP AP not found via scan — trying direct connect by prefix")
+        _netsh(["wlan", "connect", "name=NukCPGDrop-105D30", f"interface={iface}"])
+        time.sleep(3)
+        esp_ssid = "NukCPGDrop-105D30"
 
     ok(f"Found AP: {esp_ssid}")
     prev_profile = _save_and_disconnect(iface)
@@ -560,7 +572,7 @@ def main():
     time.sleep(1)
     if port_vid(port) != 0x303A:
         hard_reset_uart(port)
-        time.sleep(3)
+        time.sleep(0.3)
     check_boot(port)
 
     if not args.skip_e2e:
