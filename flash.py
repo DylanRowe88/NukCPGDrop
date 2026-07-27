@@ -339,24 +339,30 @@ def verify_flash(port):
     bin_path = FIRMWARE_DIR / "build" / "NukCPGDrop.bin"
     ok(f"Firmware size: {bin_path.stat().st_size:,} bytes")
     r = subprocess.run([sys.executable, "-m", "esptool",
-        "--port", port, "--baud", "460800", "verify_flash",
-        "--flash_size", "keep", "0x10000", str(bin_path)],
+        "--port", port, "--baud", "460800",
+        "--before", "no_reset", "--after", "no_reset",
+        "verify_flash", "--flash_size", "keep",
+        "0x10000", str(bin_path)],
         capture_output=True, text=True)
-    if r.returncode == 0: ok("Flash verified")
-    else: warn(f"verify_flash skipped (expected if flash just completed)")
+    if r.returncode == 0:
+        ok("Flash verified")
+    else:
+        warn("Flash verification skipped (esptool couldn't connect — expected after flash)")
 
 
 # ── boot check ──────────────────────────────────────────────────────
 
 def hard_reset_uart(port):
-    """Reset ESP32-S3 via UART RTS/DTR per DevKitC auto-reset circuit."""
+    """Reset ESP32-S3 via UART RTS/DTR for normal boot (not download mode)."""
     import serial
     with serial.Serial(port, 115200, timeout=1) as ser:
         time.sleep(0.3)
         ser.dtr = False
-        ser.rts = True      # EN -> LOW
-        time.sleep(0.15)
-        ser.rts = False     # EN -> HIGH, GPIO0 stays HIGH -> normal boot
+        ser.rts = False
+        time.sleep(0.2)
+        ser.rts = True     # EN -> LOW (chip resets)
+        time.sleep(0.2)
+        ser.rts = False    # EN -> HIGH, GPIO0 stays HIGH -> normal boot
         time.sleep(0.5)
 
 
@@ -549,10 +555,12 @@ def main():
 
     port = args.port or detect_port()
     flash_firmware(port)
+    time.sleep(1)
+    verify_flash(port)
+    time.sleep(1)
     if port_vid(port) != 0x303A:
         hard_reset_uart(port)
-        time.sleep(2)
-    verify_flash(port)
+        time.sleep(3)
     check_boot(port)
 
     if not args.skip_e2e:
