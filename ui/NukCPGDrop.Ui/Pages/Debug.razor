@@ -1,0 +1,227 @@
+@page "/debug"
+@implements IDisposable
+@using NukCPGDrop.Ui.Models
+
+<PageTitle>Debug - NukCPGDrop</PageTitle>
+
+<div class="debug-shell">
+    <h1>Debug</h1>
+
+    <section class="debug-section">
+        <h2>System Status</h2>
+        <div class="status-grid">
+            <div class="stat-row">
+                <span>PCA9685</span>
+                <span class="stat-value @(_status?.Pca9685Present == true ? "ok" : "err")">
+                    @(_status?.Pca9685Present == true ? "Detected" : "Not found")
+                </span>
+            </div>
+            <div class="stat-row">
+                <span>ESP</span>
+                <span class="stat-value @(_connected ? "ok" : "err")">
+                    @(_connected ? "Connected" : "Disconnected")
+                </span>
+            </div>
+            <div class="stat-row">
+                <span>Drop Count</span>
+                <span class="stat-value">@(_status?.DropCount ?? 0)</span>
+            </div>
+            <div class="stat-row">
+                <span>LED</span>
+                <span class="stat-value">
+                    R=@(_status?.Led?.R ?? 0) G=@(_status?.Led?.G ?? 0) B=@(_status?.Led?.B ?? 0)
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <section class="debug-section">
+        <h2>Servo Calibration</h2>
+        <p class="section-note">Adjust min/max pulse width for each servo (0-180°)</p>
+        @for (int i = 0; i < 6; i++)
+        {
+            <div class="servo-cal-row">
+                <span class="servo-label">Servo @(i + 1)</span>
+                <div class="range-pair">
+                    <label>Min <input type="range" min="500" max="2500" step="10"
+                           value="@_servoMin[i]"
+                           @onchange="(e) => OnServoMinChanged(i, e)" />
+                           <span class="range-val">@_servoMin[i] µs</span></label>
+                    <label>Max <input type="range" min="500" max="2500" step="10"
+                           value="@_servoMax[i]"
+                           @onchange="(e) => OnServoMaxChanged(i, e)" />
+                           <span class="range-val">@_servoMax[i] µs</span></label>
+                </div>
+                <button class="test-btn" @onclick="() => TestServo(i)">Test</button>
+            </div>
+        }
+        <button class="save-btn" @onclick="SaveCalibration">Save to NVS</button>
+    </section>
+
+    <a href="/" class="back-link">Back to Dashboard</a>
+</div>
+
+@code {
+    [Inject] private ApiService Api { get; set; } = default!;
+
+    private SystemStatus? _status;
+    private bool _connected;
+    private int[] _servoMin = { 500, 500, 500, 500, 500, 500 };
+    private int[] _servoMax = { 2500, 2500, 2500, 2500, 2500, 2500 };
+    private Timer? _pollTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+        _pollTimer = new Timer(async _ => await Refresh(), null, 0, 2000);
+    }
+
+    private async Task Refresh()
+    {
+        _status = await Api.GetStatusAsync();
+        _connected = _status != null;
+        StateHasChanged();
+    }
+
+    private void OnServoMinChanged(int idx, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val))
+            _servoMin[idx] = Math.Min(val, _servoMax[idx] - 10);
+    }
+
+    private void OnServoMaxChanged(int idx, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val))
+            _servoMax[idx] = Math.Max(val, _servoMin[idx] + 10);
+    }
+
+    private async Task TestServo(int idx)
+    {
+        await Api.DropOneAsync(idx + 1);
+    }
+
+    private async Task SaveCalibration()
+    {
+        // Placeholder for NVS save via API
+        await Task.CompletedTask;
+    }
+
+    public void Dispose() => _pollTimer?.Dispose();
+}
+
+<style>
+    .debug-shell {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+    h1 {
+        font-size: 1.4rem;
+        margin-bottom: 1rem;
+        color: var(--accent-color, #e63946);
+    }
+    .debug-section {
+        margin-bottom: 1.5rem;
+    }
+    h2 {
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+        color: var(--text-color, #f0f0f0);
+    }
+    .section-note {
+        font-size: 0.8rem;
+        color: var(--text-muted, #888);
+        margin-bottom: 0.75rem;
+    }
+    .status-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+    .stat-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        padding: 0.3rem 0;
+        border-bottom: 1px solid var(--border-color, #333);
+    }
+    .stat-value { font-weight: 600; }
+    .stat-value.ok { color: #28a745; }
+    .stat-value.err { color: #dc3545; }
+    .servo-cal-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding: 0.4rem;
+        background: #1a1a1a;
+        border-radius: 6px;
+    }
+    .servo-label {
+        min-width: 60px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .range-pair {
+        flex: 1;
+        display: flex;
+        gap: 0.5rem;
+    }
+    .range-pair label {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        font-size: 0.7rem;
+        color: var(--text-muted, #888);
+    }
+    .range-pair input[type="range"] {
+        width: 100%;
+        height: 4px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: #333;
+        border-radius: 2px;
+        outline: none;
+    }
+    .range-pair input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent-color, #e63946);
+        cursor: pointer;
+    }
+    .range-val {
+        font-size: 0.7rem;
+        color: var(--accent-color, #e63946);
+        font-weight: 600;
+    }
+    .test-btn {
+        padding: 0.3rem 0.6rem;
+        border: 1px solid var(--accent-color, #e63946);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--accent-color, #e63946);
+        cursor: pointer;
+        font-size: 0.75rem;
+    }
+    .test-btn:hover { background: var(--accent-color, #e63946); color: #fff; }
+    .save-btn {
+        width: 100%;
+        padding: 0.5rem;
+        border: none;
+        border-radius: 6px;
+        background: var(--accent-color, #e63946);
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    .back-link {
+        display: block;
+        text-align: center;
+        margin-top: 1rem;
+        color: var(--text-muted, #888);
+        font-size: 0.8rem;
+    }
+</style>

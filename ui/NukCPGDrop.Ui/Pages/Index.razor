@@ -5,7 +5,9 @@
 <PageTitle>NukCPGDrop</PageTitle>
 
 <div class="app-shell">
-    <LogoDisplay />
+    <div class="logo-bar">
+        <LogoDisplay />
+    </div>
 
     <div class="main-controls">
         <DifficultySelector
@@ -65,6 +67,7 @@
             <span class="led-twin" title="RGB LED"
                   style="background: rgb(@_status.Led.R, @_status.Led.G, @_status.Led.B);"></span>
         }
+        <a href="/debug" class="debug-link">Debug</a>
     </div>
 </div>
 
@@ -100,7 +103,7 @@
 
     private async Task RefreshStatus()
     {
-        var prev = _status;
+        SystemStatus? prev = _status;
         _status = await Api.GetStatusAsync();
         _connected = _status != null;
 
@@ -109,7 +112,7 @@
             _pca9685Ok = _status.Pca9685Present;
             _allHeld = _status.Held.All(h => h);
 
-            if (prev != null && !_isRunning)
+            if (prev != null)
             {
                 int droppedNow = 0;
                 for (int i = 0; i < 6; i++)
@@ -124,14 +127,15 @@
                     for (int i = 0; i < 6; i++)
                         if (prev.Held[i] && !_status.Held[i])
                             _ = AnimateDrop(i);
+                }
 
-                    if (_dropCount >= (_status.DoubleDrop ? 3 : 6))
-                    {
-                        await Task.Delay(600);
-                        _isRunning = false;
-                        _dropCount = 0;
-                        _droppingIndex = -1;
-                    }
+                int threshold = _status.DoubleDrop ? 3 : 6;
+                int heldCount = _status.Held.Count(h => h);
+                if (heldCount == 0 || _dropCount >= threshold)
+                {
+                    _isRunning = false;
+                    _dropCount = 0;
+                    _droppingIndex = -1;
                 }
             }
         }
@@ -242,6 +246,13 @@
         min-height: 100dvh;
         display: flex;
         flex-direction: column;
+    }
+    .logo-bar {
+        background: linear-gradient(180deg, #1a1a1a 0%, var(--bg-color, #0d0d0d) 100%);
+        border-bottom: 1px solid var(--border-color, #333);
+        margin: -0.5rem -2rem 0;
+        padding: 0.5rem 2rem 0;
+        width: calc(100% + 4rem);
     }
     .main-controls {
         flex: 1;
