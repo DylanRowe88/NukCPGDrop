@@ -8,6 +8,7 @@ on:
 
 env:
   DOTNET_VERSION: 8.0.x
+  ESP_IDF_VERSION: v5.2
 
 jobs:
   ui-build:
@@ -18,8 +19,21 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - run: dotnet restore ui/NukCPGDrop.Ui/
-      - run: dotnet build ui/NukCPGDrop.Ui/ --no-restore -c Release
-      - run: dotnet publish ui/NukCPGDrop.Ui/ --no-restore -c Release -o publish/
+      - run: dotnet build ui/NukCPGDrop.Ui/ --no-restore -c Release --no-restore
+      - run: dotnet publish ui/NukCPGDrop.Ui/ -c Release -o publish/wwwroot --no-restore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-publish
+          path: publish/
+
+  ui-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet format ui/NukCPGDrop.Ui/ --verify-no-changes --verbosity diagnostic
 
   ui-test:
     runs-on: ubuntu-latest
@@ -29,7 +43,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - run: dotnet restore tests/NukCPGDrop.Ui.Tests/
-      - run: dotnet test tests/NukCPGDrop.Ui.Tests/ --no-restore -c Release
+      - run: dotnet test tests/NukCPGDrop.Ui.Tests/ -c Release --no-restore
             /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
       - uses: codecov/codecov-action@v4
         with:
@@ -42,32 +56,24 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      - run: dotnet tool install --global dotnet-stryker
+      - run: dotnet tool restore
       - run: >
-          dotnet stryker
+          dotnet tool run dotnet-stryker
           --project ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
           --test-project tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
           --break-at 100
           --threshold-break 100
           --output StrykerOutput
-
-  ui-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-      - run: dotnet format ui/ tests/ --verify-no-changes --verbosity diagnostic
+          --since
 
   firmware-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build ESP-IDF
+      - name: Build ESP-IDF (stub web assets)
         uses: espressif/esp-idf-github-action@v1
         with:
-          esp_idf_version: v5.2
+          esp_idf_version: ${{ env.ESP_IDF_VERSION }}
           target: esp32s3
           path: firmware/
           command: idf.py build
@@ -79,15 +85,12 @@ jobs:
       - name: Build and test with QEMU
         uses: espressif/esp-idf-github-action@v1
         with:
-          esp_idf_version: v5.2
+          esp_idf_version: ${{ env.ESP_IDF_VERSION }}
           target: esp32s3
           path: firmware/
           command: idf.py test
-      - uses: codecov/codecov-action@v4
-        with:
-          files: firmware/build/coverage.info
 
-  embed-web:
+  embed-and-final-build:
     runs-on: ubuntu-latest
     needs: [ui-build, firmware-build]
     steps:
@@ -95,11 +98,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install gzip
-      - run: python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
-      - uses: espressif/esp-idf-github-action@v1
+      - uses: actions/download-artifact@v4
         with:
-          esp_idf_version: v5.2
+          name: ui-publish
+          path: publish/
+      - run: python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
+      - name: Build ESP-IDF (with embedded web)
+        uses: espressif/esp-idf-github-action@v1
+        with:
+          esp_idf_version: ${{ env.ESP_IDF_VERSION }}
           target: esp32s3
           path: firmware/
           command: idf.py build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-full
+          path: firmware/build/NukCPGDrop.bin

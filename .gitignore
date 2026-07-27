@@ -39,6 +39,9 @@ node_modules/
 Thumbs.db
 *.~
 
+# .NET local tools
+.config/
+
 # Pre-commit
 .pre-commit-config.yaml.bak
 

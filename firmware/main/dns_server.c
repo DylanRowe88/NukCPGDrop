@@ -8,13 +8,23 @@
 
 #define DNS_PORT 53
 #define DNS_MAX_QUERY 512
+#define DNS_HEADER_LEN 12
+
+typedef struct __attribute__((packed)) {
+    uint16_t id;
+    uint16_t flags;
+    uint16_t qdcount;
+    uint16_t ancount;
+    uint16_t nscount;
+    uint16_t arcount;
+} dns_header_t;
 
 static const char *TAG = "dns";
 static TaskHandle_t g_dns_task = NULL;
 
 static void dns_reply_to_esp_ip(uint8_t *buffer, size_t len)
 {
-    if (len < sizeof(dns_header_t)) return;
+    if (len < DNS_HEADER_LEN) return;
 
     // Minimal DNS response: set QR bit, echo query, append A-record answer
     // pointing to 192.168.4.1 (c0 a8 04 01)

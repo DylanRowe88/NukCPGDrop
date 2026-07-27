@@ -9,6 +9,11 @@ idf_component_register(
         web_server.c
     INCLUDE_DIRS
         include
-    EMBED_FILES
-        web_assets.h
+    REQUIRES
+        cJSON
+        mdns
+        nvs_flash
+        esp_wifi
+        esp_netif
+        lwip
 )
