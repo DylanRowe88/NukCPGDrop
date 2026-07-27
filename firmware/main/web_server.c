@@ -3,13 +3,16 @@
 #include "esp_check.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "led.h"
 #include "pca9685.h"
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"
+#include "web_server.h"
 #include "wifi_manager.h"
 #include <string.h>
 
@@ -18,9 +21,22 @@ static httpd_handle_t g_server = NULL;
 
 extern bool g_pca9685_present;
 
+static SemaphoreHandle_t g_servo_sem = NULL;
+#define MAX_CONCURRENT_SERVOS 2
+
+static esp_err_t ensure_servo_sem(void) {
+  if (!g_servo_sem) {
+    g_servo_sem =
+        xSemaphoreCreateCounting(MAX_CONCURRENT_SERVOS, MAX_CONCURRENT_SERVOS);
+    if (!g_servo_sem)
+      return ESP_ERR_NO_MEM;
+  }
+  return ESP_OK;
+}
+
 static void shuffle_array(uint8_t *arr, size_t n) {
   for (size_t i = n - 1; i > 0; i--) {
-    size_t j = rand() % (i + 1);
+    size_t j = (size_t)(esp_random() % (i + 1));
     uint8_t t = arr[j];
     arr[j] = arr[i];
     arr[i] = t;
@@ -28,6 +44,7 @@ static void shuffle_array(uint8_t *arr, size_t n) {
 }
 
 static void drop_sequence_task(void *arg) {
+  ensure_servo_sem();
   uint8_t order[6] = {0, 1, 2, 3, 4, 5};
   shuffle_array(order, 6);
   state_save_sequence(order, 0);
@@ -36,7 +53,12 @@ static void drop_sequence_task(void *arg) {
   uint8_t i = 0;
 
   while (i < 6) {
-    if (g_state.double_drop && i < 5) {
+    // Acquire semaphore slots before moving servos (max 2 concurrent)
+    int batch = g_state.double_drop && i < 5 ? 2 : 1;
+    for (int s = 0; s < batch; s++)
+      xSemaphoreTake(g_servo_sem, portMAX_DELAY);
+
+    if (batch == 2) {
       uint8_t pair[2] = {order[i], order[i + 1]};
       servos_drop_batch(pair, 2);
       i += 2;
@@ -47,12 +69,14 @@ static void drop_sequence_task(void *arg) {
     state_save_sequence(order, i);
     state_increment_drop_count();
 
+    // Release semaphores after the interval delay
     if (i < 6) {
-      if (g_state.difficulty == DIFFICULTY_RANDOM) {
+      if (g_state.difficulty == DIFFICULTY_RANDOM)
         interval = state_get_drop_interval_ms(DIFFICULTY_RANDOM);
-      }
       vTaskDelay(pdMS_TO_TICKS(interval));
     }
+    for (int s = 0; s < batch; s++)
+      xSemaphoreGive(g_servo_sem);
   }
 
   vTaskDelete(NULL);
@@ -87,7 +111,7 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON *wifi = cJSON_CreateObject();
   cJSON_AddNumberToObject(wifi, "rssi", wifi_ap_get_rssi());
   cJSON_AddNumberToObject(wifi, "clients", wifi_ap_get_sta_count());
-  cJSON_AddStringToObject(wifi, "version", IDF_VER);
+  cJSON_AddStringToObject(wifi, "version", "NukCPGDrop v1.0");
   cJSON_AddItemToObject(root, "wifi", wifi);
 
   const char *json = cJSON_Print(root);
@@ -114,8 +138,13 @@ static esp_err_t api_hold_handler(httpd_req_t *req) {
   cJSON *id_item = cJSON_GetObjectItem(json, "id");
   if (cJSON_IsNumber(id_item)) {
     uint8_t id = (uint8_t)id_item->valuedouble;
-    if (id >= 1 && id <= 6)
+    if (id >= 1 && id <= 6) {
+      ensure_servo_sem();
+      xSemaphoreTake(g_servo_sem, portMAX_DELAY);
       servos_set(id - 1, SERVO_POSITION_HOLD);
+      vTaskDelay(pdMS_TO_TICKS(200));
+      xSemaphoreGive(g_servo_sem);
+    }
   }
 
   cJSON_Delete(json);
@@ -144,8 +173,13 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
   cJSON *id_item = cJSON_GetObjectItem(json, "id");
   if (cJSON_IsNumber(id_item)) {
     uint8_t id = (uint8_t)id_item->valuedouble;
-    if (id >= 1 && id <= 6)
+    if (id >= 1 && id <= 6) {
+      ensure_servo_sem();
+      xSemaphoreTake(g_servo_sem, portMAX_DELAY);
       servos_drop(id - 1);
+      vTaskDelay(pdMS_TO_TICKS(200));
+      xSemaphoreGive(g_servo_sem);
+    }
   }
 
   cJSON_Delete(json);

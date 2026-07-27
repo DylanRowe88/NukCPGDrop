@@ -7,9 +7,16 @@ namespace NukCPGDrop.Ui.Tests.Components;
 public class LogoDisplayTests : TestContext
 {
     [Fact]
-    public void LogoDisplay_RendersFallbackText()
+    public void LogoDisplay_RendersPrefix()
     {
         var cut = RenderComponent<LogoDisplay>();
-        Assert.Contains("NUKCPGDROP", cut.Markup);
+        Assert.Contains("Dropping", cut.Markup);
+    }
+
+    [Fact]
+    public void LogoDisplay_RendersRestBar()
+    {
+        var cut = RenderComponent<LogoDisplay>();
+        Assert.Contains("REST WHEN YOU'RE DEAD", cut.Markup);
     }
 }

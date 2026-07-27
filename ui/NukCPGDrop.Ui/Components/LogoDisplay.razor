@@ -1,13 +1,13 @@
 <div class="logo-display">
-    <a href="https://canonuks.com" target="_blank" rel="noopener noreferrer"
-       class="logo-link" title="Nuks Nootropics">
-        <img src="/images/Nuks_Logo_Final_White.png"
-             alt="Nuks Logo"
-             class="logo-img"
-             onerror="this.src='/images/nuks-logo.png'" />
-    </a>
-    <div class="logo-fallback">
-        <span class="logo-text">NUKCPGDROP</span>
+    <div class="logo-header">
+        <span class="logo-prefix">Dropping</span>
+        <a href="https://canonuks.com" target="_blank" rel="noopener noreferrer"
+           class="logo-link" title="Nuks Nootropics">
+            <img src="/images/Nuks_Logo_Final_White.png"
+                 alt="Nuks Logo"
+                 class="logo-img"
+                 onerror="this.src='/images/nuks-logo.png'" />
+        </a>
     </div>
     <div class="rest-bar">
         <div class="rest-content">
@@ -26,9 +26,22 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        padding: 0.75rem 1rem 0.25rem;
+    }
+    .logo-header {
+        display: flex;
+        align-items: center;
         justify-content: center;
-        padding: 0.75rem 1rem 0.5rem;
-        gap: 0.15rem;
+        gap: 0.75rem;
+        width: 100%;
+    }
+    .logo-prefix {
+        font-size: clamp(0.8rem, 2.2vw, 1.2rem);
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        color: var(--text-muted, #888);
+        text-transform: uppercase;
+        white-space: nowrap;
     }
     .logo-link {
         display: flex;
@@ -39,51 +52,41 @@
     }
     .logo-link:hover { opacity: 0.8; }
     .logo-img {
-        max-width: clamp(100px, 25vw, 220px);
+        max-width: clamp(80px, 20vw, 180px);
         height: auto;
         object-fit: contain;
-    }
-    .logo-fallback {
-        display: flex;
-        justify-content: center;
-        width: 100%;
-    }
-    .logo-text {
-        font-size: clamp(0.9rem, 2.5vw, 1.5rem);
-        font-weight: 800;
-        letter-spacing: 0.15em;
-        color: var(--accent-color, #e63946);
-        text-align: center;
     }
     .rest-bar {
         display: flex;
         align-items: center;
         gap: 2rem;
-        padding: 0.5rem 0;
+        padding: 0.4rem 0;
         width: 100%;
         overflow: hidden;
         white-space: nowrap;
-        mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-        -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+        mask-image: linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
+        -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
     }
     .rest-content {
         display: flex;
         align-items: center;
         gap: 2rem;
-        animation: marquee-scroll 12s linear infinite;
+        animation: marquee-scroll 15s linear infinite;
+        will-change: transform;
     }
     .rat-img {
-        height: clamp(22px, 4vw, 36px);
+        height: clamp(20px, 3.5vw, 32px);
         width: auto;
-        opacity: 0.6;
+        opacity: 0.55;
     }
     .rat-img.flipped { transform: scaleX(-1); }
     .rest-text {
-        font-size: clamp(0.7rem, 2vw, 0.9rem);
+        font-size: clamp(0.65rem, 1.8vw, 0.85rem);
         font-weight: 700;
-        letter-spacing: 0.25em;
+        letter-spacing: 0.2em;
         color: var(--text-muted, #777);
         text-transform: uppercase;
+        white-space: nowrap;
     }
     @@keyframes marquee-scroll {
         0% { transform: translateX(0); }
