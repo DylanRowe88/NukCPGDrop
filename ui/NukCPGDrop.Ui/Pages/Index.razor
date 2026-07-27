@@ -56,7 +56,7 @@
     <div class="status-bar">
         <span>Drops: @TotalDrops</span>
         <span class="rssi-indicator" title="RSSI: @(_status?.Wifi?.Rssi ?? 0) dBm">
-            @RssiBars
+            <WifiIcon Signal="@WifiSignalLevel" Size="16px" Color="var(--accent-color, #e63946)" InactiveOpacity="0.15" />
         </span>
         <div class="status-right">
             @if (_status?.Led != null)
@@ -93,16 +93,16 @@
         ? Math.Min(100, _dropCount / 3.0 * 100)
         : Math.Min(100, _dropCount / 6.0 * 100);
 
-    private string RssiBars
+    private int WifiSignalLevel
     {
         get
         {
             int r = _status?.Wifi?.Rssi ?? -100;
-            if (r > -50) return "\u25A0\u25A0\u25A0\u25A0\u25A0";
-            if (r > -60) return "\u25A0\u25A0\u25A0\u25A0\u25A1";
-            if (r > -70) return "\u25A0\u25A0\u25A0\u25A1\u25A1";
-            if (r > -80) return "\u25A0\u25A0\u25A1\u25A1\u25A1";
-            return "\u25A0\u25A1\u25A1\u25A1\u25A1";
+            if (r > -50) return 4;
+            if (r > -65) return 3;
+            if (r > -75) return 2;
+            if (r > -85) return 1;
+            return 0;
         }
     }
 

@@ -263,7 +263,9 @@ static bool is_captive_probe(const char *uri) {
 
 static esp_err_t redirect_to_portal(httpd_req_t *req) {
   httpd_resp_set_status(req, "302 Found");
-  httpd_resp_set_hdr(req, "Location", "/");
+  char loc[64];
+  snprintf(loc, sizeof(loc), "http://%s/", wifi_ap_get_ip());
+  httpd_resp_set_hdr(req, "Location", loc);
   httpd_resp_send(req, NULL, 0);
   return ESP_OK;
 }

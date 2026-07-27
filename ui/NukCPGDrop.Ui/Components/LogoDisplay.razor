@@ -17,6 +17,12 @@
             <img src="/images/nuks-possum-white.png" alt="" class="rat-img" aria-hidden="true" />
             <span class="rest-text">REST WHEN YOU'RE DEAD</span>
             <img src="/images/nuks-possum-white.png" alt="" class="rat-img flipped" aria-hidden="true" />
+            <img src="/images/nuks-possum-white.png" alt="" class="rat-img" aria-hidden="true" />
+            <span class="rest-text">REST WHEN YOU'RE DEAD</span>
+            <img src="/images/nuks-possum-white.png" alt="" class="rat-img flipped" aria-hidden="true" />
+            <img src="/images/nuks-possum-white.png" alt="" class="rat-img" aria-hidden="true" />
+            <span class="rest-text">REST WHEN YOU'RE DEAD</span>
+            <img src="/images/nuks-possum-white.png" alt="" class="rat-img flipped" aria-hidden="true" />
         </div>
     </div>
 </div>
@@ -71,8 +77,10 @@
         display: flex;
         align-items: center;
         gap: 2rem;
-        animation: marquee-scroll 15s linear infinite;
+        animation: marquee-scroll 20s linear infinite;
         will-change: transform;
+        transform: translate3d(0, 0, 0);
+        backface-visibility: hidden;
     }
     .rat-img {
         height: clamp(20px, 3.5vw, 32px);
@@ -89,7 +97,7 @@
         white-space: nowrap;
     }
     @@keyframes marquee-scroll {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
+        0% { transform: translate3d(0, 0, 0); }
+        100% { transform: translate3d(-25%, 0, 0); }
     }
 </style>
