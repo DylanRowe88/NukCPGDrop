@@ -290,7 +290,9 @@ esp_err_t web_server_start(void) {
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
   cfg.max_uri_handlers = 24;
   cfg.stack_size = 8192;
-  cfg.lru_purge_enable = true;
+  cfg.lru_purge_enable = false;
+  cfg.send_wait_timeout = 30;
+  cfg.recv_wait_timeout = 30;
 
   ESP_RETURN_ON_ERROR(httpd_start(&g_server, &cfg), TAG, "httpd start");
 
