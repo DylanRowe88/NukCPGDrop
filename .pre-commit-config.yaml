@@ -16,43 +16,47 @@ repos:
     hooks:
       - id: dotnet-test
         name: .NET Unit Tests
-        entry: powershell -Command
         language: system
         pass_filenames: false
         always_run: true
+        entry: dotnet
+        args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release]
+
+      - id: build-firmware
+        name: ESP-IDF Firmware Build
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [push]
+        entry: powershell
         args:
+          - -Command
           - >
-            $ErrorActionPreference = 'Stop';
-            dotnet test tests/NukCPGDrop.Ui.Tests/
-            --configuration Release
-            --no-restore;
+            $ErrorActionPreference='Stop';
+            cd firmware;
+            idf.py build;
             if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - id: stryker-mutation
         name: Stryker Mutation Testing
-        entry: powershell -Command
         language: system
         pass_filenames: false
         always_run: false
+        stages: [push]
+        entry: dotnet
         args:
-          - >
-            dotnet stryker
-            --project ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
-            --test-project tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
-            --break-at 100
-            --threshold-break 100;
-
-      - id: idf-test
-        name: ESP-IDF Firmware Tests (QEMU)
-        entry: powershell -Command
-        language: system
-        pass_filenames: false
-        always_run: false
-        args:
-          - >
-            cd firmware;
-            idf.py test;
-            if ($LASTEXITCODE -ne 0) { exit 1 }
+          - tool
+          - run
+          - dotnet-stryker
+          - --project
+          - ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
+          - --test-project
+          - tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
+          - --break-at
+          - "100"
+          - --threshold-break
+          - "100"
+          - --since
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

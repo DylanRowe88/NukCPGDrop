@@ -14,4 +14,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.*" PrivateAssets="all" />
   </ItemGroup>
 
+  <Target Name="EmbedWebAssets" AfterTargets="Publish" Condition="Exists('$(MSBuildProjectDirectory)/../../scripts/embed-web.py')">
+    <Exec Command="python ../../scripts/embed-web.py &quot;$(PublishDir)&quot; ../../firmware/main/include/web_assets.h"
+          WorkingDirectory="$(MSBuildProjectDirectory)/../.."
+          IgnoreExitCode="true" />
+  </Target>
+
 </Project>

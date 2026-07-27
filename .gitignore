@@ -42,6 +42,9 @@ Thumbs.db
 # .NET local tools
 .config/
 
+# Build artifacts
+publish/
+
 # Pre-commit
 .pre-commit-config.yaml.bak
 
