@@ -10,10 +10,12 @@ idf_component_register(
     INCLUDE_DIRS
         include
     REQUIRES
-        cJSON
+        driver
+        json
         mdns
         nvs_flash
         esp_wifi
         esp_netif
         lwip
+        esp_http_server
 )
