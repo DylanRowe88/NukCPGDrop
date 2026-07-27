@@ -36,7 +36,7 @@ void app_main(void) {
   ESP_LOGI(TAG, "NukCPGDrop starting...");
 
   // Init RGB LED first for boot feedback
-  led_init(48);
+  led_init();
 
   ESP_ERROR_CHECK(state_init());
   ESP_LOGI(TAG, "state loaded (difficulty=%d, drops=%lu)", g_state.difficulty,

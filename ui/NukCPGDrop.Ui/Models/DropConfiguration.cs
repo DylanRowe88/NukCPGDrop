@@ -17,6 +17,13 @@ public class DropConfiguration
     public int RangeMax { get; set; } = 2000;
 }
 
+public class LedColor
+{
+    public int R { get; set; }
+    public int G { get; set; }
+    public int B { get; set; }
+}
+
 public class SystemStatus
 {
     public int Difficulty { get; set; }
@@ -27,6 +34,7 @@ public class SystemStatus
     public int CustomInterval { get; set; }
     public int RangeMin { get; set; }
     public int RangeMax { get; set; }
+    public LedColor? Led { get; set; }
 }
 
 public class DropCommand

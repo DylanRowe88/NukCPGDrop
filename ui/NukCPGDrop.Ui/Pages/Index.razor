@@ -60,6 +60,11 @@
             ESP
             <span class="connection-dot @(_connected ? "online" : "offline")"></span>
         </span>
+        @if (_status?.Led != null)
+        {
+            <span class="led-twin" title="RGB LED"
+                  style="background: rgb(@_status.Led.R, @_status.Led.G, @_status.Led.B);"></span>
+        }
     </div>
 </div>
 

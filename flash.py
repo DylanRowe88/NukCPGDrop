@@ -165,6 +165,19 @@ except RuntimeError as e:
 
 # ── helpers ──────────────────────────────────────────────────────────
 
+_timings = {}
+
+def step(label):
+    _timings[label] = time.time()
+    print(f"\n=== {label} ===")
+
+def step_end(label):
+    if label in _timings:
+        elapsed = time.time() - _timings[label]
+        print(f"  [{elapsed:.1f}s]")
+        return elapsed
+    return 0
+
 def idf_run(args, cwd=None, capture=False, check=True):
     cwd = cwd or REPO_ROOT
     cmd = [_IDF_PYTHON, f"{_IDF_PATH}/tools/idf.py"] + args
@@ -189,9 +202,6 @@ def run(cmd, cwd=None, capture=False, check=True):
     if check and r.returncode != 0: sys.exit(r.returncode)
     return r
 
-
-def step(label):
-    print(f"\n=== {label} ===")
 
 def warn(msg):
     print(f"  [WARN] {msg}")
@@ -556,30 +566,35 @@ def main():
 
     if not args.no_build:
         if not args.skip_lint:
-            run_lint()
-        run_ui_tests()
-        build_ui()
-        embed_web()
-        build_firmware()
-        test_firmware()
+            run_lint(); step_end("lint")
+        run_ui_tests(); step_end("tests")
+        build_ui(); step_end("ui")
+        embed_web(); step_end("embed")
+        build_firmware(); step_end("firmware")
+        test_firmware(); step_end("qemu")
     else:
         print("  (build skipped)")
 
     port = args.port or detect_port()
-    flash_firmware(port)
+    flash_firmware(port); step_end("flash")
     time.sleep(1)
-    verify_flash(port)
+    verify_flash(port); step_end("verify")
     time.sleep(1)
     if port_vid(port) != 0x303A:
         hard_reset_uart(port)
         time.sleep(0.3)
-    check_boot(port)
+    check_boot(port); step_end("boot")
 
     if not args.skip_e2e:
         connect_and_test_e2e()
 
     if args.monitor:
         idf_run(["-p", port, "monitor"], cwd=FIRMWARE_DIR)
+
+    print("\n=== Timing Summary ===")
+    for label, start in sorted(_timings.items(), key=lambda x: x[1]):
+        elapsed = time.time() - start
+        print(f"  {label}: {elapsed:.1f}s")
 
     print("\n=== NukCPGDrop — done ===")
 

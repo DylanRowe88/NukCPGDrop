@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "led.h"
 #include "pca9685.h"
 #include "servos.h"
 #include "state.h"
@@ -73,6 +74,14 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(root, "custom_interval", g_state.custom_interval);
   cJSON_AddNumberToObject(root, "range_min", g_state.range_min);
   cJSON_AddNumberToObject(root, "range_max", g_state.range_max);
+
+  led_color_t lc;
+  led_get_color(&lc);
+  cJSON *led = cJSON_CreateObject();
+  cJSON_AddNumberToObject(led, "r", lc.r);
+  cJSON_AddNumberToObject(led, "g", lc.g);
+  cJSON_AddNumberToObject(led, "b", lc.b);
+  cJSON_AddItemToObject(root, "led", led);
 
   const char *json = cJSON_Print(root);
   httpd_resp_set_type(req, "application/json");
