@@ -6,29 +6,40 @@ repos:
         args: [-style=file, -i]
         files: ^firmware/.*\.(c|h)$
 
-  - repo: https://github.com/calav3ra/dotnet-format
-    rev: v8.0.0
-    hooks:
-      - id: dotnet-format
-        args: [--verify-no-changes, --folder, ui/, tests/]
-
   - repo: local
     hooks:
-      - id: dotnet-restore
-        name: .NET restore
+      - id: dotnet-format
+        name: dotnet format
         language: system
         pass_filenames: false
         always_run: true
         entry: dotnet
-        args: [restore]
+        args: [format, ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj,
+               --verify-no-changes, --verbosity, normal]
+
+      - id: dotnet-restore
+        name: dotnet restore
+        language: system
+        pass_filenames: false
+        always_run: true
+        entry: dotnet
+        args: [restore, ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj]
+
+      - id: dotnet-build
+        name: dotnet build
+        language: system
+        pass_filenames: false
+        always_run: true
+        entry: dotnet
+        args: [build, ui/NukCPGDrop.Ui/, -c, Release]
 
       - id: dotnet-test
-        name: .NET unit tests
+        name: dotnet test
         language: system
         pass_filenames: false
         always_run: true
         entry: dotnet
-        args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release]
+        args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release, --no-restore]
 
       - id: firmware-build
         name: ESP-IDF firmware build
@@ -51,8 +62,8 @@ repos:
         name: ESP-IDF firmware tests (QEMU)
         language: system
         pass_filenames: false
-        always_run: true
-        stages: [push]
+        always_run: false
+        stages: [pre-push]
         entry: powershell
         args:
           - -Command
@@ -69,8 +80,8 @@ repos:
         name: Stryker mutation testing
         language: system
         pass_filenames: false
-        always_run: true
-        stages: [push]
+        always_run: false
+        stages: [pre-push]
         entry: dotnet
         args:
           - tool

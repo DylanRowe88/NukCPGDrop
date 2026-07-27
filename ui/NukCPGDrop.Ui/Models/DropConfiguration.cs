@@ -2,7 +2,7 @@ namespace NukCPGDrop.Ui.Models;
 
 public enum Difficulty
 {
-    Long  = 0,
+    Long = 0,
     Short = 1,
     Random = 2
 }
