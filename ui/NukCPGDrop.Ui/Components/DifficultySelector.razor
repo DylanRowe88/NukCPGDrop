@@ -1,0 +1,70 @@
+@using NukCPGDrop.Ui.Models
+
+<div class="difficulty-selector">
+    <h3>Difficulty</h3>
+    <div class="button-group">
+        @foreach (var opt in difficulties)
+        {
+            <button class="diff-btn @(Selected == opt.Value ? "active" : "")"
+                    @onclick="() => Select(opt.Value)">
+                @opt.Label
+            </button>
+        }
+    </div>
+
+    <label class="toggle-row">
+        <span>Double Drop</span>
+        <input type="checkbox" checked="@DoubleDrop"
+               @onchange="OnDoubleDropChanged" />
+    </label>
+</div>
+
+@code {
+    [Parameter] public Difficulty Selected { get; set; }
+    [Parameter] public bool DoubleDrop { get; set; }
+    [Parameter] public EventCallback<Difficulty> OnDifficultyChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnDoubleDropChanged { get; set; }
+
+    private record Option(string Label, Difficulty Value);
+
+    private readonly Option[] difficulties = new[]
+    {
+        new("Long",  Difficulty.Long),
+        new("Short", Difficulty.Short),
+        new("Random", Difficulty.Random),
+    };
+
+    private async Task Select(Difficulty d)
+    {
+        Selected = d;
+        await OnDifficultyChanged.InvokeAsync(d);
+    }
+}
+
+<style>
+    .difficulty-selector { margin: 1rem 0; }
+    .button-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .diff-btn {
+        flex: 1;
+        min-width: 80px;
+        padding: 0.6rem 1.2rem;
+        border: 2px solid var(--border-color, #ccc);
+        border-radius: 8px;
+        background: var(--bg-color, #fff);
+        font-size: clamp(0.85rem, 2.5vw, 1rem);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .diff-btn.active {
+        background: var(--accent-color, #e63946);
+        color: #fff;
+        border-color: var(--accent-color, #e63946);
+    }
+    .toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+        font-size: clamp(0.85rem, 2.5vw, 1rem);
+    }
+</style>

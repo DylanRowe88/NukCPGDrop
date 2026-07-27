@@ -1,0 +1,65 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8
+    hooks:
+      - id: clang-format
+        args: [-style=file, -i]
+        files: ^firmware/.*\.(c|h)$
+
+  - repo: https://github.com/calav3ra/dotnet-format
+    rev: v8.0.0
+    hooks:
+      - id: dotnet-format
+        args: [--verify-no-changes, --folder, ui/, tests/]
+
+  - repo: local
+    hooks:
+      - id: dotnet-test
+        name: .NET Unit Tests
+        entry: powershell -Command
+        language: system
+        pass_filenames: false
+        always_run: true
+        args:
+          - >
+            $ErrorActionPreference = 'Stop';
+            dotnet test tests/NukCPGDrop.Ui.Tests/
+            --configuration Release
+            --no-restore;
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - id: stryker-mutation
+        name: Stryker Mutation Testing
+        entry: powershell -Command
+        language: system
+        pass_filenames: false
+        always_run: false
+        args:
+          - >
+            dotnet stryker
+            --project ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
+            --test-project tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
+            --break-at 100
+            --threshold-break 100;
+
+      - id: idf-test
+        name: ESP-IDF Firmware Tests (QEMU)
+        entry: powershell -Command
+        language: system
+        pass_filenames: false
+        always_run: false
+        args:
+          - >
+            cd firmware;
+            idf.py test;
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict

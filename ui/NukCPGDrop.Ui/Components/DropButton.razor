@@ -1,0 +1,35 @@
+<button class="drop-btn" @onclick="OnClick" disabled="@Disabled">
+    <span class="btn-label">@Label</span>
+    <span class="btn-subtitle">@Subtitle</span>
+</button>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Subtitle { get; set; } = "";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+}
+
+<style>
+    .drop-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem 2rem;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--accent-color, #e63946), #c1121f);
+        color: #fff;
+        font-family: inherit;
+        cursor: pointer;
+        transition: transform 0.15s, opacity 0.2s;
+        min-height: clamp(60px, 12vw, 100px);
+        width: 100%;
+    }
+    .drop-btn:hover:not(:disabled) { transform: scale(1.03); }
+    .drop-btn:active:not(:disabled) { transform: scale(0.97); }
+    .drop-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-label { font-size: clamp(1.1rem, 3.5vw, 1.6rem); font-weight: 700; }
+    .btn-subtitle { font-size: clamp(0.75rem, 2vw, 0.9rem); opacity: 0.85; }
+</style>

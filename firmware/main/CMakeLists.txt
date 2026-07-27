@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        main.c
+        pca9685.c
+        servos.c
+        state.c
+        wifi_manager.c
+        dns_server.c
+        web_server.c
+    INCLUDE_DIRS
+        include
+    EMBED_FILES
+        web_assets.h
+)

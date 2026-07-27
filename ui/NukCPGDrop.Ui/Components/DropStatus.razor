@@ -1,0 +1,35 @@
+<div class="drop-status">
+    @for (int i = 0; i < 6; i++)
+    {
+        <div class="can-slot @(Held.Length > i && Held[i] ? "held" : "dropped")">
+            <span class="can-number">@(i + 1)</span>
+            <span class="can-state">@(Held.Length > i && Held[i] ? "●" : "○")</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool[] Held { get; set; } = new bool[6];
+}
+
+<style>
+    .drop-status {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin: 1rem 0;
+    }
+    .can-slot {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.5rem;
+        border-radius: 8px;
+        background: var(--slot-bg, #f0f0f0);
+        transition: background 0.3s;
+    }
+    .can-slot.held { background: var(--held-bg, #d4edda); }
+    .can-slot.dropped { background: var(--dropped-bg, #f8d7da); }
+    .can-number { font-size: clamp(0.8rem, 2.5vw, 1rem); font-weight: 600; }
+    .can-state { font-size: clamp(1.2rem, 3vw, 1.5rem); }
+</style>

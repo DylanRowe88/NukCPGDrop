@@ -1,0 +1,56 @@
+# ESP-IDF
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/dependencies.lock
+firmware/managed_components/
+
+# .NET
+ui/**/bin/
+ui/**/obj/
+ui/**/*.user
+ui/**/.vs/
+tests/**/bin/
+tests/**/obj/
+tests/**/*.user
+tests/**/.vs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+scripts/__pycache__/
+
+# Node
+ui/NukCPGDrop.Ui/wwwroot/js/*.bundle.js
+node_modules/
+
+# IDE
+.vs/
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.~
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+
+# Coverage
+coverage/
+*.coverage
+*.coveragexml
+*.lcov
+*.gcda
+*.gcno
+*.gcov
+
+# Mutation testing
+StrykerOutput/
+Reports/

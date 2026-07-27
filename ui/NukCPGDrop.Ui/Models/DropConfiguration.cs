@@ -1,0 +1,28 @@
+namespace NukCPGDrop.Ui.Models;
+
+public enum Difficulty
+{
+    Long  = 0,
+    Short = 1,
+    Random = 2
+}
+
+public class DropConfiguration
+{
+    public Difficulty Difficulty { get; set; } = Difficulty.Short;
+    public bool DoubleDrop { get; set; } = false;
+    public int DropCount { get; set; } = 0;
+}
+
+public class SystemStatus
+{
+    public int Difficulty { get; set; }
+    public bool DoubleDrop { get; set; }
+    public int DropCount { get; set; }
+    public bool[] Held { get; set; } = new bool[6];
+}
+
+public class DropCommand
+{
+    public int? Id { get; set; }
+}
