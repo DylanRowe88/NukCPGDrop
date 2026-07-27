@@ -275,7 +275,24 @@ static esp_err_t serve_asset(httpd_req_t *req, size_t idx) {
   if (web_assets[idx].len < web_assets[idx].raw_len)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
   httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
-  httpd_resp_send(req, (const char *)web_assets[idx].data, web_assets[idx].len);
+
+  // Use chunked transfer encoding for all assets.
+  // httpd_resp_send_chunk sends one chunk per call so the send-wait
+  // timeout applies per-chunk, not to the entire response.
+  // Large .wasm files (1 MB+) can otherwise trigger ERR_CONNECTION_RESET.
+  const unsigned char *data = web_assets[idx].data;
+  size_t remain = web_assets[idx].len;
+  const size_t chunk_sz = 4096;
+
+  while (remain > 0) {
+    size_t sz = remain > chunk_sz ? chunk_sz : remain;
+    if (httpd_resp_send_chunk(req, (const char *)data, sz) != ESP_OK)
+      goto finish;
+    data += sz;
+    remain -= sz;
+  }
+finish:
+  httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
 }
 
@@ -340,8 +357,9 @@ esp_err_t web_server_start(void) {
   cfg.max_uri_handlers = 24;
   cfg.stack_size = 8192;
   cfg.lru_purge_enable = false;
-  cfg.send_wait_timeout = 30;
-  cfg.recv_wait_timeout = 30;
+  cfg.send_wait_timeout = 60;
+  cfg.recv_wait_timeout = 60;
+  cfg.lru_purge_enable = true;
 
   ESP_RETURN_ON_ERROR(httpd_start(&g_server, &cfg), TAG, "httpd start");
 
