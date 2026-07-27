@@ -22,6 +22,7 @@ esp_err_t servos_drop_batch(const uint8_t *indices, uint8_t count);
 esp_err_t servos_hold_all(void);
 esp_err_t servos_release_all(void);
 bool      servos_is_held(uint8_t index);
+bool      servos_pca9685_present(void);
 
 #ifdef __cplusplus
 }

@@ -18,7 +18,8 @@ public class ApiServiceTests
             Difficulty = 1,
             DoubleDrop = false,
             DropCount = 5,
-            Held = new[] { true, true, true, true, true, true }
+            Held = new[] { true, true, true, true, true, true },
+            Pca9685Present = true,
         };
 
         var http = CreateMockHttpClient(expected);

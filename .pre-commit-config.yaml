@@ -14,34 +14,62 @@ repos:
 
   - repo: local
     hooks:
+      - id: dotnet-restore
+        name: .NET restore
+        language: system
+        pass_filenames: false
+        always_run: true
+        entry: dotnet
+        args: [restore]
+
       - id: dotnet-test
-        name: .NET Unit Tests
+        name: .NET unit tests
         language: system
         pass_filenames: false
         always_run: true
         entry: dotnet
         args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release]
 
-      - id: build-firmware
-        name: ESP-IDF Firmware Build
+      - id: firmware-build
+        name: ESP-IDF firmware build
         language: system
         pass_filenames: false
-        always_run: false
+        always_run: true
+        entry: powershell
+        args:
+          - -Command
+          - >
+            $idf = Get-Command idf.py -ErrorAction SilentlyContinue;
+            if (-not $idf) { Write-Host "[skip] idf.py not in PATH"; exit 0 };
+            $ErrorActionPreference = 'Stop';
+            Push-Location firmware;
+            idf.py build;
+            if ($LASTEXITCODE -ne 0) { exit 1 };
+            Pop-Location
+
+      - id: firmware-test
+        name: ESP-IDF firmware tests (QEMU)
+        language: system
+        pass_filenames: false
+        always_run: true
         stages: [push]
         entry: powershell
         args:
           - -Command
           - >
-            $ErrorActionPreference='Stop';
-            cd firmware;
-            idf.py build;
-            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $idf = Get-Command idf.py -ErrorAction SilentlyContinue;
+            if (-not $idf) { Write-Host "[skip] idf.py not in PATH"; exit 0 };
+            $ErrorActionPreference = 'Stop';
+            Push-Location firmware;
+            idf.py test;
+            if ($LASTEXITCODE -ne 0) { exit 1 };
+            Pop-Location
 
       - id: stryker-mutation
-        name: Stryker Mutation Testing
+        name: Stryker mutation testing
         language: system
         pass_filenames: false
-        always_run: false
+        always_run: true
         stages: [push]
         entry: dotnet
         args:

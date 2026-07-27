@@ -1,5 +1,6 @@
 @page "/"
 @attribute [RenderModeWebAssembly]
+@implements IDisposable
 
 <PageTitle>NukCPGDrop</PageTitle>
 
@@ -14,14 +15,29 @@
             OnDoubleDropChanged="OnDoubleDropChanged" />
 
         <DropButton Label="DROP ALL"
-                    Subtitle="Start random sequence"
+                    Subtitle="@DropSubtitle"
                     Disabled="@_isRunning"
                     OnClick="StartDrop" />
 
-        <DropStatus Held="@(_status?.Held ?? new bool[6])" />
+        @if (_isRunning && _status != null)
+        {
+            <div class="sequence-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill"
+                         style="width: @($"{ProgressPercent}%")"></div>
+                </div>
+                <span class="progress-label">@(_dropCount / (_doubleDrop ? 2 : 1))/@(_doubleDrop ? 3 : 6)</span>
+            </div>
+        }
+
+        <DropStatus Held="@(_status?.Held ?? new bool[6])"
+                    DroppingIndex="@_droppingIndex"
+                    SequenceActive="@_isRunning" />
     </div>
 
     <div class="status-bar">
+        <span class="hardware-dot @(_pca9685Ok ? "online" : "offline")"
+              title="PCA9685 @(_pca9685Ok ? "detected" : "not found")"></span>
         <span>Drops: @(_status?.DropCount ?? 0)</span>
         <span class="connection-dot @(_connected ? "online" : "offline")"></span>
     </div>
@@ -34,28 +50,79 @@
     private SystemStatus? _status;
     private bool _isRunning;
     private bool _connected;
+    private bool _pca9685Ok;
+    private int _droppingIndex = -1;
+    private int _dropCount;
+    private bool _doubleDrop;
     private Timer? _pollTimer;
+    private Timer? _animTimer;
+
+    private string DropSubtitle => _isRunning ? "Sequence in progress..." : "Start random sequence";
+    private double ProgressPercent => _doubleDrop
+        ? Math.Min(100, _dropCount / 3.0 * 100)
+        : Math.Min(100, _dropCount / 6.0 * 100);
 
     protected override async Task OnInitializedAsync()
     {
         await RefreshStatus();
-        _pollTimer = new Timer(async _ => await RefreshStatus(), null, 0, 2000);
+        _pollTimer = new Timer(async _ => await RefreshStatus(), null, 500, 800);
     }
 
     private async Task RefreshStatus()
     {
+        var prev = _status;
         _status = await Api.GetStatusAsync();
         _connected = _status != null;
+
+        if (_status != null)
+        {
+            _pca9685Ok = _status.Pca9685Present;
+
+            if (prev != null)
+            {
+                int droppedNow = 0;
+                for (int i = 0; i < 6; i++)
+                    if (prev.Held[i] && !_status.Held[i]) droppedNow++;
+
+                if (droppedNow > 0)
+                {
+                    _isRunning = true;
+                    _dropCount += droppedNow;
+                    _doubleDrop = _status.DoubleDrop;
+
+                    for (int i = 0; i < 6; i++)
+                        if (prev.Held[i] && !_status.Held[i])
+                            _ = AnimateDrop(i);
+
+                    if (_dropCount >= (_status.DoubleDrop ? 3 : 6))
+                    {
+                        await Task.Delay(600);
+                        _isRunning = false;
+                        _dropCount = 0;
+                        _droppingIndex = -1;
+                    }
+                }
+            }
+        }
+
         State.NotifyStateChanged();
         StateHasChanged();
+    }
+
+    private async Task AnimateDrop(int idx)
+    {
+        _droppingIndex = idx;
+        StateHasChanged();
+        await Task.Delay(500);
+        if (_droppingIndex == idx) _droppingIndex = -1;
     }
 
     private async Task StartDrop()
     {
         _isRunning = true;
+        _dropCount = 0;
+        _doubleDrop = _status?.DoubleDrop ?? false;
         await Api.DropAllAsync();
-        await Task.Delay(15000);
-        _isRunning = false;
     }
 
     private async Task OnDifficultyChanged(Difficulty d)
@@ -70,7 +137,11 @@
         await Api.UpdateConfigAsync(State.Config);
     }
 
-    public void Dispose() => _pollTimer?.Dispose();
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+        _animTimer?.Dispose();
+    }
 }
 
 <style>
@@ -89,6 +160,30 @@
         justify-content: center;
         gap: 1rem;
     }
+    .sequence-progress {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .progress-bar {
+        flex: 1;
+        height: 8px;
+        background: var(--border-color, #ddd);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent-color, #e63946), #c1121f);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+    .progress-label {
+        font-size: clamp(0.75rem, 2vw, 0.9rem);
+        color: var(--text-muted, #666);
+        min-width: 2rem;
+        text-align: right;
+    }
     .status-bar {
         display: flex;
         justify-content: space-between;
@@ -97,12 +192,14 @@
         font-size: clamp(0.75rem, 2vw, 0.9rem);
         color: var(--text-muted, #666);
     }
-    .connection-dot {
+    .connection-dot, .hardware-dot {
         width: 10px;
         height: 10px;
         border-radius: 50%;
         background: #dc3545;
         transition: background 0.3s;
+        display: inline-block;
     }
     .connection-dot.online { background: #28a745; }
+    .hardware-dot.online { background: #e63946; }
 </style>

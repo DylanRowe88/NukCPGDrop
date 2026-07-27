@@ -31,6 +31,7 @@ esp_err_t pca9685_write_batch(pca9685_t *dev, const uint8_t *channels,
                               const uint16_t *values, uint8_t count);
 
 esp_err_t pca9685_set_outputs(pca9685_t *dev, uint8_t outputs_enabled);
+bool      pca9685_is_present(pca9685_t *dev);
 
 #ifdef __cplusplus
 }

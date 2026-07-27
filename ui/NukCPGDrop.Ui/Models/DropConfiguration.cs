@@ -20,6 +20,7 @@ public class SystemStatus
     public bool DoubleDrop { get; set; }
     public int DropCount { get; set; }
     public bool[] Held { get; set; } = new bool[6];
+    public bool Pca9685Present { get; set; }
 }
 
 public class DropCommand

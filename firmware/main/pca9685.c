@@ -146,3 +146,10 @@ esp_err_t pca9685_set_outputs(pca9685_t *dev, uint8_t outputs_enabled)
     }
     return pca9685_write_reg(dev, PCA9685_MODE1, mode1);
 }
+
+bool pca9685_is_present(pca9685_t *dev)
+{
+    if (!dev) return false;
+    esp_err_t ret = i2c_master_transmit(dev->dev_handle, NULL, 0, pdMS_TO_TICKS(50));
+    return (ret == ESP_OK);
+}

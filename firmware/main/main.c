@@ -1,16 +1,19 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "mdns.h"
 #include "servos.h"
 #include "state.h"
+#include "pca9685.h"
 #include "wifi_manager.h"
 #include "dns_server.h"
 #include "web_server.h"
 
 static const char *TAG = "nukcpgdrop";
+bool g_pca9685_present = false;
 
 static void start_mdns(void)
 {
@@ -29,14 +32,23 @@ void app_main(void)
     ESP_LOGI(TAG, "state loaded (difficulty=%d, drops=%lu)",
              g_state.difficulty, g_state.drop_count);
 
-    ESP_ERROR_CHECK(servos_init());
-    ESP_LOGI(TAG, "servos initialized (%d channels)", SERVO_COUNT);
+    esp_err_t sv_ret = servos_init();
+    g_pca9685_present = servos_pca9685_present();
+    if (sv_ret == ESP_OK && g_pca9685_present) {
+        ESP_LOGI(TAG, "servos initialized, PCA9685 detected");
+    } else {
+        ESP_LOGW(TAG, "PCA9685 not found — continuing in headless mode");
+    }
+
+    gpio_set_direction(GPIO_NUM_10, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_10, g_pca9685_present);
 
     ESP_ERROR_CHECK(wifi_ap_start());
     start_mdns();
     ESP_ERROR_CHECK(dns_server_start());
     ESP_ERROR_CHECK(web_server_start());
 
-    ESP_LOGI(TAG, "Ready. Connect to SSID: %s", wifi_ap_get_ssid());
+    ESP_LOGI(TAG, "Ready. SSID: %s  IP: %s",
+             wifi_ap_get_ssid(), wifi_ap_get_ip());
     ESP_LOGI(TAG, "Open http://nukcpgdrop.local or http://192.168.4.1");
 }

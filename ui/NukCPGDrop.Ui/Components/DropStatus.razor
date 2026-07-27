@@ -1,15 +1,28 @@
 <div class="drop-status">
     @for (int i = 0; i < 6; i++)
     {
-        <div class="can-slot @(Held.Length > i && Held[i] ? "held" : "dropped")">
+        <div class="can-slot @StatusClass(i) @(DroppingIndex == i ? "dropping" : "")"
+             style="animation-delay: @($"{i * 0.1}s")">
             <span class="can-number">@(i + 1)</span>
-            <span class="can-state">@(Held.Length > i && Held[i] ? "●" : "○")</span>
+            <span class="can-state">@StateSymbol(i)</span>
+            @if (DroppingIndex == i)
+            {
+                <span class="drop-indicator"></span>
+            }
         </div>
     }
 </div>
 
 @code {
     [Parameter] public bool[] Held { get; set; } = new bool[6];
+    [Parameter] public int DroppingIndex { get; set; } = -1;
+    [Parameter] public bool SequenceActive { get; set; }
+
+    private string StatusClass(int i) =>
+        i >= Held.Length ? "" : (Held[i] ? "held" : "dropped");
+
+    private string StateSymbol(int i) =>
+        i >= Held.Length ? "?" : (Held[i] ? "\u25CF" : "\u25CB");
 }
 
 <style>
@@ -20,16 +33,51 @@
         margin: 1rem 0;
     }
     .can-slot {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 0.5rem;
-        border-radius: 8px;
+        padding: 0.75rem 0.5rem;
+        border-radius: 10px;
         background: var(--slot-bg, #f0f0f0);
-        transition: background 0.3s;
+        transition: background 0.3s, transform 0.3s;
     }
-    .can-slot.held { background: var(--held-bg, #d4edda); }
-    .can-slot.dropped { background: var(--dropped-bg, #f8d7da); }
-    .can-number { font-size: clamp(0.8rem, 2.5vw, 1rem); font-weight: 600; }
-    .can-state { font-size: clamp(1.2rem, 3vw, 1.5rem); }
+    .can-slot.held {
+        background: var(--held-bg, #d4edda);
+        box-shadow: 0 0 6px rgba(40, 167, 69, 0.3);
+    }
+    .can-slot.dropped {
+        background: var(--dropped-bg, #f8d7da);
+        transform: translateY(4px);
+        opacity: 0.7;
+    }
+    .can-slot.dropping {
+        animation: can-drop 0.4s ease-in forwards;
+    }
+    .can-number {
+        font-size: clamp(0.8rem, 2.5vw, 1rem);
+        font-weight: 600;
+    }
+    .can-state {
+        font-size: clamp(1.2rem, 3vw, 1.5rem);
+        line-height: 1;
+    }
+    .drop-indicator {
+        position: absolute;
+        bottom: -4px;
+        width: 20px;
+        height: 3px;
+        background: var(--accent-color, #e63946);
+        border-radius: 2px;
+        animation: pulse-indicator 0.6s ease-in-out infinite;
+    }
+    @@keyframes can-drop {
+        0%   { transform: translateY(0); opacity: 1; }
+        50%  { transform: translateY(12px); opacity: 0.6; }
+        100% { transform: translateY(4px); opacity: 0.7; }
+    }
+    @@keyframes pulse-indicator {
+        0%, 100% { opacity: 1; width: 20px; }
+        50%      { opacity: 0.4; width: 30px; }
+    }
 </style>

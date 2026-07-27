@@ -10,6 +10,7 @@
 
 static pca9685_t *g_pca = NULL;
 static bool g_held[SERVO_COUNT];
+static bool g_pca9685_found = false;
 
 static const char *TAG = "servos";
 
@@ -34,7 +35,18 @@ esp_err_t servos_init(void)
         .clk_speed = 400000,
     };
 
-    ESP_RETURN_ON_ERROR(pca9685_init(&g_pca, &cfg), TAG, "pca9685 init");
+    esp_err_t ret = pca9685_init(&g_pca, &cfg);
+    if (ret != ESP_OK) {
+        g_pca9685_found = false;
+        return ret;
+    }
+
+    g_pca9685_found = pca9685_is_present(g_pca);
+    if (!g_pca9685_found) {
+        ESP_LOGW(TAG, "PCA9685 not responding on I2C bus");
+        return ESP_ERR_NOT_FOUND;
+    }
+
     ESP_RETURN_ON_ERROR(pca9685_set_pwm_freq(g_pca, PCA9685_SERVO_FREQ_HZ), TAG, "set freq");
 
     for (int i = 0; i < SERVO_COUNT; i++) {
@@ -93,4 +105,9 @@ bool servos_is_held(uint8_t index)
 {
     if (index >= SERVO_COUNT) return false;
     return g_held[index];
+}
+
+bool servos_pca9685_present(void)
+{
+    return g_pca9685_found;
 }
