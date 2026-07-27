@@ -6,35 +6,24 @@ in random sequence, driven by ESP32-S3 with a Blazor WebAssembly captive portal 
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USER/NukCPGDrop.git
-cd NukCPGDrop
+# Build UI + embed + flash
+python flash.py
 
-# Setup pre-commit hooks
-scripts/setup-hooks.ps1
-
-# Build firmware
-cd firmware
-idf.py set-target esp32s3
-idf.py build
-idf.py flash monitor
-
-# Build UI (standalone dev)
-cd ui/NukCPGDrop.Ui
-dotnet run
+# Or step by step:
+dotnet publish ui/NukCPGDrop.Ui/ -c Release
+python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
+cd firmware && idf.py build && idf.py -p COM3 flash monitor
 ```
 
 ## Architecture
 
 ```
-ESP32-S3 (WiFi AP)
-  ├── mDNS: nukcpgdrop.local
-  ├── DNS:  captive portal (all → 192.168.4.1)
-  ├── HTTP: serves Blazor WASM + REST API
-  ├── I2C:  PCA9685 via DMA (GPIO8/9)
-  └── GPIO: 6x SG90 servos + magnets
+ESP32-S3 (WiFi AP) → serves Blazor WASM via HTTP + REST API
+                  → PCA9685 I2C (GPIO8/9) → 6x SG90 servos + N52 magnets
+                  → captive portal (DNS catch-all, mDNS: nukcpgdrop.local)
 ```
 
-See [NUKCPGDROP_PLAN.md](NUKCPGDROP_PLAN.md) for full details.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for full design, CI/CD pipeline, and deployment.
 
 ## License
 
