@@ -275,24 +275,7 @@ static esp_err_t serve_asset(httpd_req_t *req, size_t idx) {
   if (web_assets[idx].len < web_assets[idx].raw_len)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
   httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
-
-  // Use chunked transfer encoding for all assets.
-  // httpd_resp_send_chunk sends one chunk per call so the send-wait
-  // timeout applies per-chunk, not to the entire response.
-  // Large .wasm files (1 MB+) can otherwise trigger ERR_CONNECTION_RESET.
-  const unsigned char *data = web_assets[idx].data;
-  size_t remain = web_assets[idx].len;
-  const size_t chunk_sz = 4096;
-
-  while (remain > 0) {
-    size_t sz = remain > chunk_sz ? chunk_sz : remain;
-    if (httpd_resp_send_chunk(req, (const char *)data, sz) != ESP_OK)
-      goto finish;
-    data += sz;
-    remain -= sz;
-  }
-finish:
-  httpd_resp_send_chunk(req, NULL, 0);
+  httpd_resp_send(req, (const char *)web_assets[idx].data, web_assets[idx].len);
   return ESP_OK;
 }
 
@@ -331,17 +314,6 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
   return ESP_FAIL;
 }
 
-// ── Catch-all: any unmatched URI -> serve embedded assets ───────
-
-static esp_err_t catch_all_handler(httpd_req_t *req, httpd_err_code_t err) {
-  // Captive portal probes redirect to /
-  if (is_captive_probe(req->uri))
-    return redirect_to_portal(req);
-
-  // Try to serve from embedded assets
-  return wildcard_handler(req);
-}
-
 // ── URI registration ─────────────────────────────────────────────
 
 static const httpd_uri_t api_uris[] = {
@@ -356,7 +328,6 @@ esp_err_t web_server_start(void) {
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
   cfg.max_uri_handlers = 24;
   cfg.stack_size = 8192;
-  cfg.lru_purge_enable = false;
   cfg.send_wait_timeout = 60;
   cfg.recv_wait_timeout = 60;
   cfg.lru_purge_enable = true;
@@ -367,9 +338,17 @@ esp_err_t web_server_start(void) {
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // Register a custom 404 handler for ALL unmatched URIs.
-  // This catches everything: /css/app.css, /_framework/*, /favicon.ico, etc.
-  httpd_register_err_handler(g_server, HTTPD_404_NOT_FOUND, catch_all_handler);
+  // Wildcard handler for all remaining GET requests (static assets).
+  // Registered AFTER API routes so they take priority.
+  // Previously used a 404 error handler, but that caused ESP-IDF to send
+  // default 404 headers (Content-Type: text/html) before calling the handler,
+  // which made the browser reject binary .wasm files (ERR_CONNECTION_RESET).
+  const httpd_uri_t wildcard_uri = {
+      .uri = "/*",
+      .method = HTTP_GET,
+      .handler = wildcard_handler,
+  };
+  httpd_register_uri_handler(g_server, &wildcard_uri);
 
   ESP_LOGI(TAG, "HTTP server running on :80 (%u assets embedded)",
            web_assets_count);
