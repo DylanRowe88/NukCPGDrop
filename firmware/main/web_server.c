@@ -91,6 +91,32 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+static esp_err_t api_hold_handler(httpd_req_t *req) {
+  char buf[16];
+  int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+  if (len <= 0)
+    return ESP_FAIL;
+  buf[len] = 0;
+
+  cJSON *json = cJSON_Parse(buf);
+  if (!json) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json");
+    return ESP_FAIL;
+  }
+
+  cJSON *id_item = cJSON_GetObjectItem(json, "id");
+  if (cJSON_IsNumber(id_item)) {
+    uint8_t id = (uint8_t)id_item->valuedouble;
+    if (id >= 1 && id <= 6)
+      servos_set(id - 1, SERVO_POSITION_HOLD);
+  }
+
+  cJSON_Delete(json);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+  return ESP_OK;
+}
+
 static esp_err_t api_drop_handler(httpd_req_t *req) {
   char buf[16];
   int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -255,6 +281,7 @@ static esp_err_t catch_all_handler(httpd_req_t *req, httpd_err_code_t err) {
 static const httpd_uri_t api_uris[] = {
     {.uri = "/api/status", .method = HTTP_GET, .handler = api_status_handler},
     {.uri = "/api/drop", .method = HTTP_POST, .handler = api_drop_handler},
+    {.uri = "/api/hold", .method = HTTP_POST, .handler = api_hold_handler},
     {.uri = "/api/reset", .method = HTTP_POST, .handler = api_reset_handler},
     {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_handler},
 };

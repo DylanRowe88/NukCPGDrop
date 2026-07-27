@@ -11,51 +11,55 @@
         <h2>System Status</h2>
         <div class="status-grid">
             <div class="stat-row">
+                <span>Drop Count (total)</span>
+                <span class="stat-value">@(_status?.DropCount ?? 0)</span>
+            </div>
+            <div class="stat-row">
                 <span>PCA9685</span>
-                <span class="stat-value @(_status?.Pca9685Present == true ? "ok" : "err")">
-                    @(_status?.Pca9685Present == true ? "Detected" : "Not found")
+                <span class="stat-value @(_pcaOk ? "ok" : "err")">
+                    @(_pcaOk ? "Detected" : (_status == null ? "Connecting..." : "Not found"))
                 </span>
             </div>
             <div class="stat-row">
-                <span>ESP</span>
+                <span>ESP Connection</span>
                 <span class="stat-value @(_connected ? "ok" : "err")">
                     @(_connected ? "Connected" : "Disconnected")
                 </span>
             </div>
             <div class="stat-row">
-                <span>Drop Count</span>
-                <span class="stat-value">@(_status?.DropCount ?? 0)</span>
+                <span>RGB LED</span>
+                <span class="stat-value" style="color: rgb(@(ledR), @(ledG), @(ledB));">
+                    @if (_status?.Led != null) { <text>R=@ledR G=@ledG B=@ledB</text> }
+                    else { <text>--</text> }
+                </span>
             </div>
             <div class="stat-row">
-                <span>LED</span>
-                <span class="stat-value">
-                    R=@(_status?.Led?.R ?? 0) G=@(_status?.Led?.G ?? 0) B=@(_status?.Led?.B ?? 0)
-                </span>
+                <span>Held Cans</span>
+                <span class="stat-value">@heldStr</span>
             </div>
         </div>
     </section>
 
     <section class="debug-section">
         <h2>Servo Calibration</h2>
-        <p class="section-note">Adjust min/max pulse width for each servo (0-180°)</p>
+        <p class="section-note">Drag the slider to adjust servo travel range (500-2500 µs)</p>
         @for (int i = 0; i < 6; i++)
         {
             <div class="servo-cal-row">
                 <span class="servo-label">Servo @(i + 1)</span>
-                <div class="range-pair">
-                    <label>Min <input type="range" min="500" max="2500" step="10"
-                           value="@_servoMin[i]"
-                           @onchange="(e) => OnServoMinChanged(i, e)" />
-                           <span class="range-val">@_servoMin[i] µs</span></label>
-                    <label>Max <input type="range" min="500" max="2500" step="10"
-                           value="@_servoMax[i]"
-                           @onchange="(e) => OnServoMaxChanged(i, e)" />
-                           <span class="range-val">@_servoMax[i] µs</span></label>
+                <div class="range-container">
+                    <RangeSlider Min="500" Max="2500" RangeMode="true"
+                                 Value="@((double)_servoMin[i])"
+                                 RangeHigh="@((double)_servoMax[i])"
+                                 RangeChanged="(r) => OnServoRangeChanged(i, r)" />
+                    <div class="range-readout">
+                        <span class="readout-min">@_servoMin[i] µs</span>
+                        <span class="readout-max">@_servoMax[i] µs</span>
+                    </div>
                 </div>
                 <button class="test-btn" @onclick="() => TestServo(i)">Test</button>
             </div>
         }
-        <button class="save-btn" @onclick="SaveCalibration">Save to NVS</button>
     </section>
 
     <a href="/" class="back-link">Back to Dashboard</a>
@@ -66,6 +70,9 @@
 
     private SystemStatus? _status;
     private bool _connected;
+    private bool _pcaOk;
+    private int ledR, ledG, ledB;
+    private string heldStr = "";
     private int[] _servoMin = { 500, 500, 500, 500, 500, 500 };
     private int[] _servoMax = { 2500, 2500, 2500, 2500, 2500, 2500 };
     private Timer? _pollTimer;
@@ -73,37 +80,32 @@
     protected override async Task OnInitializedAsync()
     {
         await Refresh();
-        _pollTimer = new Timer(async _ => await Refresh(), null, 0, 2000);
+        _pollTimer = new Timer(async _ => await InvokeAsync(Refresh), null, 1000, 2000);
     }
 
     private async Task Refresh()
     {
         _status = await Api.GetStatusAsync();
         _connected = _status != null;
+        if (_status != null)
+        {
+            _pcaOk = _status.Pca9685Present;
+            if (_status.Led != null) { ledR = _status.Led.R; ledG = _status.Led.G; ledB = _status.Led.B; }
+            heldStr = string.Join(" ", _status.Held.Select((h, i) => h ? $"{i + 1}" : "_"));
+        }
         StateHasChanged();
     }
 
-    private void OnServoMinChanged(int idx, ChangeEventArgs e)
+    private void OnServoRangeChanged(int idx, (double Low, double High) range)
     {
-        if (int.TryParse(e.Value?.ToString(), out var val))
-            _servoMin[idx] = Math.Min(val, _servoMax[idx] - 10);
-    }
-
-    private void OnServoMaxChanged(int idx, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var val))
-            _servoMax[idx] = Math.Max(val, _servoMin[idx] + 10);
+        _servoMin[idx] = (int)range.Low;
+        _servoMax[idx] = (int)range.High;
     }
 
     private async Task TestServo(int idx)
     {
         await Api.DropOneAsync(idx + 1);
-    }
-
-    private async Task SaveCalibration()
-    {
-        // Placeholder for NVS save via API
-        await Task.CompletedTask;
+        await Refresh();
     }
 
     public void Dispose() => _pollTimer?.Dispose();
@@ -152,50 +154,28 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        margin-bottom: 0.5rem;
-        padding: 0.4rem;
+        margin-bottom: 0.75rem;
+        padding: 0.5rem;
         background: #1a1a1a;
         border-radius: 6px;
     }
     .servo-label {
-        min-width: 60px;
-        font-size: 0.85rem;
+        min-width: 55px;
+        font-size: 0.8rem;
         font-weight: 600;
     }
-    .range-pair {
+    .range-container {
         flex: 1;
-        display: flex;
-        gap: 0.5rem;
     }
-    .range-pair label {
-        flex: 1;
+    .range-readout {
         display: flex;
-        flex-direction: column;
+        justify-content: space-between;
         font-size: 0.7rem;
         color: var(--text-muted, #888);
+        margin-top: 2px;
     }
-    .range-pair input[type="range"] {
-        width: 100%;
-        height: 4px;
-        -webkit-appearance: none;
-        appearance: none;
-        background: #333;
-        border-radius: 2px;
-        outline: none;
-    }
-    .range-pair input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--accent-color, #e63946);
-        cursor: pointer;
-    }
-    .range-val {
-        font-size: 0.7rem;
-        color: var(--accent-color, #e63946);
-        font-weight: 600;
-    }
+    .readout-min { color: var(--accent-color, #e63946); }
+    .readout-max { color: #c1121f; }
     .test-btn {
         padding: 0.3rem 0.6rem;
         border: 1px solid var(--accent-color, #e63946);
@@ -204,19 +184,9 @@
         color: var(--accent-color, #e63946);
         cursor: pointer;
         font-size: 0.75rem;
+        min-width: 40px;
     }
     .test-btn:hover { background: var(--accent-color, #e63946); color: #fff; }
-    .save-btn {
-        width: 100%;
-        padding: 0.5rem;
-        border: none;
-        border-radius: 6px;
-        background: var(--accent-color, #e63946);
-        color: #fff;
-        cursor: pointer;
-        font-size: 0.9rem;
-        margin-top: 0.5rem;
-    }
     .back-link {
         display: block;
         text-align: center;

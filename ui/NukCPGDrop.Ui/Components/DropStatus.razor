@@ -2,7 +2,9 @@
     @for (int i = 0; i < 6; i++)
     {
         <div class="can-slot @StatusClass(i) @(DroppingIndex == i ? "dropping" : "")"
-             style="animation-delay: @($"{i * 0.1}s")">
+             style="animation-delay: @($"{i * 0.1}s")"
+             @onclick="() => OnToggleCan.InvokeAsync(i)"
+             title="@(Held.Length > i && Held[i] ? "Click to release" : "Click to hold")">
             <span class="can-number">@(i + 1)</span>
             <span class="can-state">@StateSymbol(i)</span>
             @if (DroppingIndex == i)
@@ -17,6 +19,7 @@
     [Parameter] public bool[] Held { get; set; } = new bool[6];
     [Parameter] public int DroppingIndex { get; set; } = -1;
     [Parameter] public bool SequenceActive { get; set; }
+    [Parameter] public EventCallback<int> OnToggleCan { get; set; }
 
     private string StatusClass(int i) =>
         i >= Held.Length ? "" : (Held[i] ? "held" : "dropped");
@@ -39,15 +42,20 @@
         align-items: center;
         padding: 0.75rem 0.5rem;
         border-radius: 10px;
-        background: var(--slot-bg, #f0f0f0);
+        background: var(--slot-bg, #1a1a1a);
         transition: background 0.3s, transform 0.3s;
+        cursor: pointer;
+        user-select: none;
+    }
+    .can-slot:hover {
+        filter: brightness(1.3);
     }
     .can-slot.held {
-        background: var(--held-bg, #d4edda);
+        background: var(--held-bg, #1a3a1a);
         box-shadow: 0 0 6px rgba(40, 167, 69, 0.3);
     }
     .can-slot.dropped {
-        background: var(--dropped-bg, #f8d7da);
+        background: var(--dropped-bg, #3a1a1a);
         transform: translateY(4px);
         opacity: 0.7;
     }

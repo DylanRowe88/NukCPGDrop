@@ -1,0 +1,150 @@
+@using Microsoft.AspNetCore.Components.Web
+
+<div class="rs-container">
+    <div class="rs-track"
+         @ref="trackRef"
+         @onpointerdown="OnPointerDown"
+         @onpointermove="OnPointerMove"
+         @onpointerup="StopDrag"
+         @onpointerleave="StopDrag"
+         @onpointercancel="StopDrag">
+        <div class="rs-highlight" style="@HighlightStyle"></div>
+        <div class="rs-thumb" style="left: @(PctLow)%"
+             @onpointerdown="(e) => StartDrag(e, false)"
+             @onpointermove="(e) => OnPointerMove(e)"></div>
+        @if (RangeMode)
+        {
+            <div class="rs-thumb rs-thumb-high" style="left: @(PctHigh)%"
+                 @onpointerdown="(e) => StartDrag(e, true)"
+                 @onpointermove="(e) => OnPointerMove(e)"></div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public double Min { get; set; } = 0;
+    [Parameter] public double Max { get; set; } = 100;
+    [Parameter] public double Value { get; set; } = 50;
+    [Parameter] public double RangeLow { get; set; } = 20;
+    [Parameter] public double RangeHigh { get; set; } = 80;
+    [Parameter] public bool RangeMode { get; set; }
+    [Parameter] public string Format { get; set; } = "F0";
+    [Parameter] public EventCallback<double> ValueChanged { get; set; }
+    [Parameter] public EventCallback<(double Low, double High)> RangeChanged { get; set; }
+
+    private ElementReference trackRef;
+    private bool _dragging;
+    private bool _dragHigh;
+    private double _trackWidth = 300;
+
+    private double PctLow => ((Value - Min) / (Max - Min)) * 100;
+    private double PctHigh => ((RangeHigh - Min) / (Max - Min)) * 100;
+
+    private string HighlightStyle
+    {
+        get
+        {
+            if (RangeMode)
+            {
+                double left = PctLow;
+                double width = PctHigh - left;
+                return $"left: {left:F1}%; width: {width:F1}%;";
+            }
+            return $"left: 0%; width: {PctLow:F1}%;";
+        }
+    }
+
+    private void StartDrag(PointerEventArgs e, bool isHigh)
+    {
+        _dragging = true;
+        _dragHigh = isHigh;
+    }
+
+    private void StopDrag()
+    {
+        _dragging = false;
+    }
+
+    private async Task OnPointerDown(PointerEventArgs e)
+    {
+        _dragging = true;
+        _dragHigh = false;
+        await UpdateFromEvent(e);
+    }
+
+    private async Task OnPointerMove(PointerEventArgs e)
+    {
+        if (!_dragging) return;
+        await UpdateFromEvent(e);
+    }
+
+    private async Task UpdateFromEvent(PointerEventArgs e)
+    {
+        if (_trackWidth <= 0) return;
+        double relX = Math.Clamp(e.OffsetX, 0, _trackWidth);
+        double newVal = Min + (relX / _trackWidth) * (Max - Min);
+
+        if (RangeMode && _dragHigh)
+        {
+            RangeHigh = Math.Max(newVal, Value);
+            RangeHigh = Math.Min(RangeHigh, Max);
+            await RangeChanged.InvokeAsync((Value, RangeHigh));
+        }
+        else
+        {
+            Value = RangeMode ? Math.Min(newVal, RangeHigh) : Math.Min(newVal, Max);
+            Value = Math.Max(Value, Min);
+            if (RangeMode)
+                await RangeChanged.InvokeAsync((Value, RangeHigh));
+            else
+                await ValueChanged.InvokeAsync(Value);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _trackWidth = 300;
+        }
+    }
+}
+
+<style>
+    .rs-container {
+        width: 100%;
+        padding: 4px 0;
+        user-select: none;
+        touch-action: none;
+    }
+    .rs-track {
+        position: relative;
+        width: 100%;
+        height: 8px;
+        background: var(--border-color, #333);
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .rs-highlight {
+        position: absolute;
+        height: 100%;
+        background: var(--accent-color, #e63946);
+        border-radius: 4px;
+        pointer-events: none;
+    }
+    .rs-thumb {
+        position: absolute;
+        top: 50%;
+        width: 20px;
+        height: 20px;
+        background: #fff;
+        border: 2px solid var(--accent-color, #e63946);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        cursor: grab;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        z-index: 1;
+    }
+    .rs-thumb:active { cursor: grabbing; transform: translate(-50%, -50%) scale(1.15); }
+    .rs-thumb-high { border-color: #c1121f; }
+</style>

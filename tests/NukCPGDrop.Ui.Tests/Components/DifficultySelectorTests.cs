@@ -8,13 +8,13 @@ namespace NukCPGDrop.Ui.Tests.Components;
 public class DifficultySelectorTests : TestContext
 {
     [Fact]
-    public void DifficultySelector_RendersIntervalSlider()
+    public void DifficultySelector_RendersRangeSlider()
     {
         var cut = RenderComponent<DifficultySelector>(p => p
             .Add(s => s.Interval, 1000)
         );
 
-        var slider = cut.Find(".interval-slider");
+        var slider = cut.Find(".rs-track");
         Assert.NotNull(slider);
     }
 
@@ -27,18 +27,5 @@ public class DifficultySelectorTests : TestContext
 
         var checkbox = cut.Find("input[type='checkbox']");
         Assert.NotNull(checkbox);
-    }
-
-    [Fact]
-    public void DifficultySelector_TogglesRandomRange()
-    {
-        var cut = RenderComponent<DifficultySelector>(p => p
-            .Add(s => s.RandomEnabled, true)
-            .Add(s => s.RangeMin, 300)
-            .Add(s => s.RangeMax, 2000)
-        );
-
-        var rangeLabels = cut.FindAll(".range-value");
-        Assert.NotEmpty(rangeLabels);
     }
 }

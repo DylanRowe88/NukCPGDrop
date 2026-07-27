@@ -5,10 +5,10 @@
         <span class="slider-label">Interval</span>
         <span class="slider-value">@Interval ms</span>
     </div>
-    <input type="range" class="interval-slider"
-           min="@MinInterval" max="@MaxInterval" step="100"
-           value="@Interval"
-           @onchange="OnIntervalSliderChanged" />
+
+    <RangeSlider Min="100" Max="3000"
+                 Value="@((double)Interval)"
+                 ValueChanged="OnIntervalChanged" />
 
     <label class="toggle-row">
         <input type="checkbox" checked="@RandomEnabled"
@@ -22,18 +22,9 @@
             <span class="range-label">Range:</span>
             <span class="range-value">@RangeMin – @RangeMax ms</span>
         </div>
-        <div class="range-sliders">
-            <div class="range-slider-group">
-                <span class="range-sub">Min</span>
-                <input type="range" min="@MinInterval" max="@MaxInterval" step="100"
-                       value="@RangeMin" @onchange="OnRangeMinChanged" />
-            </div>
-            <div class="range-slider-group">
-                <span class="range-sub">Max</span>
-                <input type="range" min="@MinInterval" max="@MaxInterval" step="100"
-                       value="@RangeMax" @onchange="OnRangeMaxChanged" />
-            </div>
-        </div>
+        <RangeSlider Min="100" Max="3000" RangeMode="true"
+                     Value="@((double)RangeMin)" RangeHigh="@((double)RangeMax)"
+                     RangeChanged="HandleRangeChanged" />
     }
 
     <label class="toggle-row">
@@ -54,13 +45,13 @@
 
     [Parameter] public EventCallback<int> IntervalChanged { get; set; }
     [Parameter] public EventCallback<bool> OnRandomToggled { get; set; }
-    [Parameter] public EventCallback<(int Min, int Max)> OnRangeChanged { get; set; }
+    [Parameter] public EventCallback<(int Min, int Max)> RangeChanged { get; set; }
     [Parameter] public EventCallback<bool> OnDoubleDropChanged { get; set; }
 
-    private async Task OnIntervalSliderChanged(ChangeEventArgs e)
+    private async Task OnIntervalChanged(double val)
     {
-        if (int.TryParse(e.Value?.ToString(), out var val))
-            await IntervalChanged.InvokeAsync(val);
+        Interval = (int)val;
+        await IntervalChanged.InvokeAsync(Interval);
     }
 
     private async Task OnRandomToggle(ChangeEventArgs e)
@@ -69,16 +60,11 @@
         await OnRandomToggled.InvokeAsync(val);
     }
 
-    private async Task OnRangeMinChanged(ChangeEventArgs e)
+    private async Task HandleRangeChanged((double Low, double High) range)
     {
-        if (int.TryParse(e.Value?.ToString(), out var val) && val <= RangeMax)
-            await OnRangeChanged.InvokeAsync((val, RangeMax));
-    }
-
-    private async Task OnRangeMaxChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var val) && val >= RangeMin)
-            await OnRangeChanged.InvokeAsync((RangeMin, val));
+        RangeMin = (int)range.Low;
+        RangeMax = (int)range.High;
+        await RangeChanged.InvokeAsync((RangeMin, RangeMax));
     }
 
     private async Task OnDoubleDropToggle(ChangeEventArgs e)
@@ -112,24 +98,6 @@
         font-weight: 700;
         color: var(--accent-color, #e63946);
     }
-    .interval-slider {
-        width: 100%;
-        height: 6px;
-        -webkit-appearance: none;
-        appearance: none;
-        background: var(--border-color, #333);
-        border-radius: 3px;
-        outline: none;
-        cursor: pointer;
-    }
-    .interval-slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: var(--accent-color, #e63946);
-        cursor: pointer;
-    }
     .toggle-row {
         display: flex;
         align-items: center;
@@ -156,38 +124,5 @@
         font-size: clamp(0.75rem, 2vw, 0.9rem);
         font-weight: 600;
         color: var(--accent-color, #e63946);
-    }
-    .range-sliders {
-        display: flex;
-        gap: 1rem;
-    }
-    .range-slider-group {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 0.15rem;
-    }
-    .range-sub {
-        font-size: clamp(0.6rem, 1.5vw, 0.75rem);
-        color: var(--text-muted, #888);
-        text-transform: uppercase;
-    }
-    .range-slider-group input[type="range"] {
-        width: 100%;
-        height: 5px;
-        -webkit-appearance: none;
-        appearance: none;
-        background: var(--border-color, #333);
-        border-radius: 3px;
-        outline: none;
-        cursor: pointer;
-    }
-    .range-slider-group input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--accent-color, #e63946);
-        cursor: pointer;
     }
 </style>

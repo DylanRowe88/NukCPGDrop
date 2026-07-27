@@ -45,6 +45,17 @@ public class ApiService
         catch { return false; }
     }
 
+    public async Task<bool> HoldOneAsync(int id)
+    {
+        try
+        {
+            var cmd = new DropCommand { Id = id };
+            var response = await _http.PostAsJsonAsync("/api/hold", cmd);
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
     public async Task<bool> ResetAllAsync()
     {
         try

@@ -49,25 +49,20 @@
 
         <DropStatus Held="@(_status?.Held ?? new bool[6])"
                     DroppingIndex="@_droppingIndex"
-                    SequenceActive="@_isRunning" />
+                    SequenceActive="@_isRunning"
+                    OnToggleCan="OnToggleCan" />
     </div>
 
     <div class="status-bar">
-        <span class="status-label">
-            <span class="hardware-dot @(_pca9685Ok ? "online" : "offline")"></span>
-            PCA9685
-        </span>
         <span>Drops: @TotalDrops</span>
-        <span class="status-label">
-            ESP
-            <span class="connection-dot @(_connected ? "online" : "offline")"></span>
-        </span>
-        @if (_status?.Led != null)
-        {
-            <span class="led-twin" title="RGB LED"
-                  style="background: rgb(@_status.Led.R, @_status.Led.G, @_status.Led.B);"></span>
-        }
-        <a href="/debug" class="debug-link">Debug</a>
+        <div class="status-right">
+            @if (_status?.Led != null)
+            {
+                <span class="led-twin" title="RGB LED"
+                      style="background: rgb(@_status.Led.R, @_status.Led.G, @_status.Led.B);"></span>
+            }
+            <a href="/debug" class="debug-link">Debug</a>
+        </div>
     </div>
 </div>
 
@@ -98,7 +93,7 @@
     protected override async Task OnInitializedAsync()
     {
         await RefreshStatus();
-        _pollTimer = new Timer(async _ => await RefreshStatus(), null, 500, 800);
+        _pollTimer = new Timer(async _ => await InvokeAsync(RefreshStatus), null, 500, 800);
     }
 
     private async Task RefreshStatus()
@@ -150,6 +145,16 @@
         StateHasChanged();
         await Task.Delay(500);
         if (_droppingIndex == idx) _droppingIndex = -1;
+    }
+
+    private async Task OnToggleCan(int idx)
+    {
+        if (_status == null || idx >= _status.Held.Length) return;
+        if (_status.Held[idx])
+            await Api.DropOneAsync(idx + 1);
+        else
+            await Api.HoldOneAsync(idx + 1);
+        await RefreshStatus();
     }
 
     private async Task ResetAll()
