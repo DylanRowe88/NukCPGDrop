@@ -12,13 +12,13 @@ Usage:
 Port priority: CH343 (1A86:55D3) > native USB (303A:1001) > CP210x > CH340 > FTDI
 """
 
-import argparse, os, sys, subprocess, json, time, re, platform, socket
+import argparse, os, sys, subprocess, json, time, re, platform, socket, ipaddress
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
 ESP32_VID_PID = [
-    (0x1A86, 0x55D3),   # CH343 UART (common on ESP32-S3 dev boards) ← preferred
+    (0x1A86, 0x55D3),   # CH343 UART (common on ESP32-S3 dev boards)
     (0x303A, 0x1001),   # ESP32-S3 native USB
     (0x10C4, 0xEA60),   # CP2102/CP2104
     (0x10C4, 0xEA70),   # CP2105
@@ -112,7 +112,6 @@ def detect_port():
             print(f"    {p.device}  [{vp}]  {p.description}")
         fail("Specify port manually:  python flash.py --port COM3")
 
-    # Sort: CH343 first, native USB second, then by VID/PID order
     def sort_key(m):
         vid, pid = m[1], m[2]
         if (vid, pid) == (0x1A86, 0x55D3): return 0
@@ -147,7 +146,7 @@ def build_ui():
          "-o", str(REPO_ROOT / "publish" / "wwwroot")])
 
 def embed_web():
-    step("Embed: WASM → C header")
+    step("Embed: WASM -> C header")
     pub = REPO_ROOT / "publish" / "wwwroot"
     if not pub.exists():
         print("  [skip] no publish output found"); return
@@ -210,6 +209,17 @@ def verify_flash(port):
 
 # ── serial boot check ──────────────────────────────────────────────
 
+def hard_reset_uart(port):
+    """Reset ESP32-S3 via UART RTS/DTR per DevKitC auto-reset circuit."""
+    import serial
+    with serial.Serial(port, 115200, timeout=1) as ser:
+        time.sleep(0.3)
+        ser.dtr = False
+        ser.rts = True
+        time.sleep(0.15)
+        ser.rts = False
+        time.sleep(0.5)
+
 def check_boot(port, timeout=15):
     step("Check: serial boot")
     try:
@@ -235,7 +245,7 @@ def check_boot(port, timeout=15):
             lower = line.lower()
             if 'fatal' in lower or 'panic' in lower or 'abort' in lower:
                 errors.append(line)
-            if 'ready' in lower or 'starting' in lower or 'app_main' in lower:
+            if 'ready' in lower or 'app_main' in lower:
                 boot_complete = True
         except: pass
 
@@ -245,62 +255,16 @@ def check_boot(port, timeout=15):
     if boot_complete:
         ok("Boot OK — no errors detected")
     else:
-        warn("Boot monitor ended without seeing 'ready' — check manually")
+        warn("Boot monitor ended without seeing 'app_main'")
 
-    return boot_complete
-
-# ── E2E: WiFi + Playwright ─────────────────────────────────────────
-
-def wait_for_ap(ssid_prefix="NukCPGDrop-", timeout=25):
-    step("E2E: connect to ESP32 WiFi AP")
-    try:
-        import pywifi
-        from pywifi import const
-    except ImportError:
-        run([sys.executable, "-m", "pip", "install", "pywifi"])
-        import pywifi
-        from pywifi import const
-
-    wifi = pywifi.PyWiFi()
-    iface = wifi.interfaces()[0]
-    iface.disconnect()
-    time.sleep(1)
-    iface.scan()
-    time.sleep(2)
-
-    ssid = None
-    start = time.time()
-    while time.time() - start < timeout:
-        results = iface.scan_results()
-        for ap in results:
-            if ap.ssid.startswith(ssid_prefix):
-                ssid = ap.ssid
-                break
-        if ssid: break
-        time.sleep(2)
-        iface.scan()
-
-    if not ssid:
-        warn(f"No AP with prefix '{ssid_prefix}' found after {timeout}s")
-        return None
-
-    print(f"  Found AP: {ssid}")
-    profile = pywifi.Profile()
-    profile.ssid = ssid
-    profile.auth = const.AUTH_ALG_OPEN
-    profile.akm.append(const.AKM_TYPE_NONE)
-    iface.remove_all_network_profiles()
-    tmp = iface.add_network_profile(profile)
-    iface.connect(tmp)
-    time.sleep(5)
-    if iface.status() == const.IFACE_CONNECTED:
-        ok(f"Connected to {ssid}")
-        return ssid
-    warn(f"Failed to connect to {ssid}")
-    return None
+# ── E2E: Playwright (manual WiFi connect required) ──────────────────
 
 def playwright_e2e(ssid):
     step("E2E: Playwright captive portal test")
+    print("  Make sure your computer is connected to the ESP's WiFi AP first.")
+    print(f"  Connect to SSID starting with '{ssid or 'NukCPGDrop-'}' then press Enter...")
+    input("  Press Enter when connected...")
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -315,7 +279,7 @@ def playwright_e2e(ssid):
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            page.goto(url, timeout=15000)
+            page.goto(url, timeout=20000, wait_until='domcontentloaded')
             title = page.title()
             ok(f"Page title: {title}")
 
@@ -333,25 +297,17 @@ def playwright_e2e(ssid):
             else:
                 warn("Nuks logo image not found")
 
-            page.goto(f"{url}/api/status", timeout=10000)
+            page.goto(f"{url}/api/status", timeout=10000, wait_until='domcontentloaded')
             status_text = page.text_content("pre") or page.text_content("body") or ""
             if "difficulty" in status_text.lower():
-                ok(f"REST API responds: {status_text[:100]}")
+                ok(f"REST API responds: {status_text[:120]}")
             else:
-                warn(f"REST API response: {status_text[:100]}")
+                warn(f"REST API response: {status_text[:120]}")
 
         except Exception as e:
             warn(f"Playwright error: {e}")
         finally:
             browser.close()
-
-def disconnect_wifi():
-    try:
-        import pywifi
-        wifi = pywifi.PyWiFi()
-        iface = wifi.interfaces()[0]
-        iface.disconnect()
-    except: pass
 
 # ── main ─────────────────────────────────────────────────────────────
 
@@ -381,20 +337,18 @@ def main():
 
     port = args.port or detect_port()
     flash_firmware(port)
+    hard_reset_uart(port)
+    time.sleep(2)
     verify_flash(port)
     check_boot(port)
 
     if not args.skip_e2e:
-        ssid = wait_for_ap()
-        if ssid:
-            playwright_e2e(ssid)
-            disconnect_wifi()
+        playwright_e2e("NukCPGDrop-")
 
     if args.monitor:
-        from flash_serial import serial_monitor
-        serial_monitor(port)
+        idf_run(["-p", port, "monitor"], cwd=FIRMWARE_DIR)
 
-    print("\n[OK] NukCPGDrop — done")
+    print("\n=== NukCPGDrop — done ===")
 
 
 if __name__ == "__main__":
