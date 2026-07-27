@@ -163,6 +163,15 @@ static esp_err_t redirect_to_portal(httpd_req_t *req) {
   return ESP_OK;
 }
 
+static esp_err_t serve_asset(httpd_req_t *req, size_t idx) {
+  httpd_resp_set_type(req, web_assets[idx].mime);
+  if (web_assets[idx].len < web_assets[idx].raw_len)
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+  httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
+  httpd_resp_send(req, (const char *)web_assets[idx].data, web_assets[idx].len);
+  return ESP_OK;
+}
+
 static esp_err_t wildcard_handler(httpd_req_t *req) {
   const char *uri = req->uri;
 
@@ -170,9 +179,9 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
     return redirect_to_portal(req);
 
   const char *lookup = uri;
-  char normalized[64];
+  char normalized[128];
   if (strcmp(uri, "/") == 0) {
-    lookup = "/index.html";
+    lookup = "/wwwroot/index.html";
   } else if (uri[0] == '/') {
     lookup = uri;
   } else {
@@ -184,13 +193,13 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
 
   for (size_t i = 0; i < web_assets_count; i++) {
     if (strcmp(lookup, web_assets[i].path) == 0) {
-      httpd_resp_set_type(req, web_assets[i].mime);
-      if (web_assets[i].len < web_assets[i].raw_len)
-        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
-      httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
-      size_t send_len = web_assets[i].len;
-      httpd_resp_send(req, (const char *)web_assets[i].data, send_len);
-      return ESP_OK;
+      return serve_asset(req, i);
+    }
+    // Also check with /wwwroot prefix (legacy embed-web paths)
+    if (lookup[0] == '/' && web_assets[i].path[0] == '/' &&
+        strncmp(web_assets[i].path, "/wwwroot", 8) == 0 &&
+        strcmp(web_assets[i].path + 8, lookup) == 0) {
+      return serve_asset(req, i);
     }
   }
 
