@@ -6,9 +6,9 @@
         <span class="slider-value">@Interval ms</span>
     </div>
 
-    <RangeSlider Min="100" Max="3000"
-                 Value="@((double)Interval)"
-                 ValueChanged="OnIntervalChanged" />
+    <RangeSlider Min="100" Max="3000" Step="100"
+                 LowValue="@((double)Interval)"
+                 LowValueChanged="OnIntervalChanged" />
 
     <label class="toggle-row">
         <input type="checkbox" checked="@RandomEnabled"
@@ -22,9 +22,9 @@
             <span class="range-label">Range:</span>
             <span class="range-value">@RangeMin – @RangeMax ms</span>
         </div>
-        <RangeSlider Min="100" Max="3000" RangeMode="true"
-                     Value="@((double)RangeMin)" RangeHigh="@((double)RangeMax)"
-                     RangeChanged="HandleRangeChanged" />
+        <RangeSlider Min="100" Max="3000" Step="100" RangeMode="true"
+                     LowValue="@((double)RangeMin)" HighValue="@((double)RangeMax)"
+                     LowValueChanged="OnLowValChanged" HighValueChanged="OnHighValChanged" />
     }
 
     <label class="toggle-row">
@@ -35,8 +35,6 @@
 </div>
 
 @code {
-    [Parameter] public int MinInterval { get; set; } = 100;
-    [Parameter] public int MaxInterval { get; set; } = 3000;
     [Parameter] public int Interval { get; set; } = 2000;
     [Parameter] public bool RandomEnabled { get; set; }
     [Parameter] public int RangeMin { get; set; } = 300;
@@ -48,81 +46,21 @@
     [Parameter] public EventCallback<(int Min, int Max)> RangeChanged { get; set; }
     [Parameter] public EventCallback<bool> OnDoubleDropChanged { get; set; }
 
-    private async Task OnIntervalChanged(double val)
-    {
-        Interval = (int)val;
-        await IntervalChanged.InvokeAsync(Interval);
-    }
-
-    private async Task OnRandomToggle(ChangeEventArgs e)
-    {
-        var val = e.Value is true;
-        await OnRandomToggled.InvokeAsync(val);
-    }
-
-    private async Task HandleRangeChanged((double Low, double High) range)
-    {
-        RangeMin = (int)range.Low;
-        RangeMax = (int)range.High;
-        await RangeChanged.InvokeAsync((RangeMin, RangeMax));
-    }
-
-    private async Task OnDoubleDropToggle(ChangeEventArgs e)
-    {
-        var val = e.Value is true;
-        await OnDoubleDropChanged.InvokeAsync(val);
-    }
+    private async Task OnIntervalChanged(double v) { Interval = (int)v; await IntervalChanged.InvokeAsync(Interval); }
+    private async Task OnRandomToggle(ChangeEventArgs e) { await OnRandomToggled.InvokeAsync(e.Value is true); }
+    private async Task OnLowValChanged(double v) { RangeMin = (int)v; await RangeChanged.InvokeAsync((RangeMin, RangeMax)); }
+    private async Task OnHighValChanged(double v) { RangeMax = (int)v; await RangeChanged.InvokeAsync((RangeMin, RangeMax)); }
+    private async Task OnDoubleDropToggle(ChangeEventArgs e) { await OnDoubleDropChanged.InvokeAsync(e.Value is true); }
 }
 
 <style>
-    .difficulty-selector {
-        margin: 0.5rem 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    .slider-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .slider-label {
-        font-size: clamp(0.75rem, 2vw, 0.9rem);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: var(--text-muted, #888);
-    }
-    .slider-value {
-        font-size: clamp(0.8rem, 2.2vw, 1rem);
-        font-weight: 700;
-        color: var(--accent-color, #e63946);
-    }
-    .toggle-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: clamp(0.75rem, 2vw, 0.9rem);
-        cursor: pointer;
-    }
-    .toggle-row input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--accent-color, #e63946);
-        cursor: pointer;
-    }
-    .range-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .range-label {
-        font-size: clamp(0.7rem, 1.8vw, 0.85rem);
-        color: var(--text-muted, #888);
-    }
-    .range-value {
-        font-size: clamp(0.75rem, 2vw, 0.9rem);
-        font-weight: 600;
-        color: var(--accent-color, #e63946);
-    }
+    .difficulty-selector { margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .slider-row { display: flex; justify-content: space-between; align-items: center; }
+    .slider-label { font-size: clamp(0.75rem, 2vw, 0.9rem); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted, #888); }
+    .slider-value { font-size: clamp(0.8rem, 2.2vw, 1rem); font-weight: 700; color: var(--accent-color, #e63946); }
+    .toggle-row { display: flex; align-items: center; gap: 0.5rem; font-size: clamp(0.75rem, 2vw, 0.9rem); cursor: pointer; }
+    .toggle-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent-color, #e63946); cursor: pointer; }
+    .range-row { display: flex; justify-content: space-between; align-items: center; }
+    .range-label { font-size: clamp(0.7rem, 1.8vw, 0.85rem); color: var(--text-muted, #888); }
+    .range-value { font-size: clamp(0.75rem, 2vw, 0.9rem); font-weight: 600; color: var(--accent-color, #e63946); }
 </style>

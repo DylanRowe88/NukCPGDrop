@@ -1,192 +1,151 @@
 @using Microsoft.AspNetCore.Components.Web
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="rs-wrap">
     <div class="rs-track" @ref="trackEl"
-         @onpointerdown="OnPointerDown"
-         @onpointermove="OnPointerMove"
-         @onpointerup="StopDrag"
-         @onpointerleave="StopDrag"
-         @onpointercancel="StopDrag">
-        <div class="rs-highlight" style="@HighlightStyle"></div>
-        <div class="rs-thumb @(dragLow ? "active" : "")" style="left: @(PctLow)%"></div>
+         @onpointerdown="OnTrackDown"
+         @onpointermove="OnTrackMove"
+         @onpointerup="OnPointerUp"
+         @onpointercancel="OnPointerUp"
+         @onlostpointercapture="OnPointerUp">
+        <div class="rs-fill" style="@FillStyle"></div>
+        <button type="button" class="rs-thumb" style="left:@(Percent(LowValue))%"
+                @onpointerdown="e => OnThumbDown(e, false)"
+                tabindex="0" aria-label="Minimum value"></button>
         @if (RangeMode)
         {
-            <div class="rs-thumb rs-thumb-high @(dragHigh ? "active" : "")" style="left: @(PctHigh)%"></div>
+            <button type="button" class="rs-thumb rs-thumb-hi" style="left:@(Percent(HighValue))%"
+                    @onpointerdown="e => OnThumbDown(e, true)"
+                    tabindex="0" aria-label="Maximum value"></button>
         }
     </div>
     <div class="rs-inputs">
-        <input class="rs-input" type="number" min="@Min" max="@(RangeMode ? RangeHigh : Max)" step="@Step"
-               value="@ValueDisplay(Value)" @onchange="OnLowInput" />
+        <input class="rs-input" type="number" min="@Min" max="@(RangeMode ? HighValue : Max)" step="@Step"
+               value="@LowValue" @onchange="OnLowInput" />
         @if (RangeMode)
         {
             <span class="rs-sep">to</span>
-            <input class="rs-input" type="number" min="@Value" max="@Max" step="@Step"
-                   value="@ValueDisplay(RangeHigh)" @onchange="OnHighInput" />
+            <input class="rs-input" type="number" min="@LowValue" max="@Max" step="@Step"
+                   value="@HighValue" @onchange="OnHighInput" />
         }
     </div>
 </div>
 
 @code {
+    [Parameter] public bool RangeMode { get; set; }
     [Parameter] public double Min { get; set; } = 0;
     [Parameter] public double Max { get; set; } = 100;
     [Parameter] public double Step { get; set; } = 1;
-    [Parameter] public double Value { get; set; } = 50;
-    [Parameter] public double RangeHigh { get; set; } = 80;
-    [Parameter] public bool RangeMode { get; set; }
-    [Parameter] public EventCallback<double> ValueChanged { get; set; }
-    [Parameter] public EventCallback<(double Low, double High)> RangeChanged { get; set; }
+    [Parameter] public double LowValue { get; set; }
+    [Parameter] public double HighValue { get; set; } = 100;
+    [Parameter] public EventCallback<double> LowValueChanged { get; set; }
+    [Parameter] public EventCallback<double> HighValueChanged { get; set; }
 
     private ElementReference trackEl;
-    private bool dragging, dragLow, dragHigh;
-    private double trackLeft = 0, trackWidth = 300;
-    private bool measured;
+    private IJSObjectReference? js;
+    private bool dragging, dragHigh;
+    private double trackLeft, trackWidth;
 
-    private string ValueDisplay(double v) => ((int)Math.Round(v)).ToString();
+    private double Percent(double v) => Max > Min ? ((v - Min) / (Max - Min)) * 100.0 : 0;
+    private string FillStyle => RangeMode
+        ? $"left:{Percent(LowValue):F2}%;width:{Percent(HighValue) - Percent(LowValue):F2}%"
+        : $"left:0%;width:{Percent(LowValue):F2}%";
 
-    private double PctLow => Max > Min ? ((Value - Min) / (Max - Min)) * 100 : 0;
-    private double PctHigh => Max > Min ? ((RangeHigh - Min) / (Max - Min)) * 100 : 0;
-
-    private string HighlightStyle
-    {
-        get
-        {
-            if (RangeMode)
-            {
-                double l = Math.Min(PctLow, PctHigh);
-                double r = Math.Max(PctLow, PctHigh);
-                return $"left: {l:F1}%; width: {r - l:F1}%;";
-            }
-            return $"left: 0%; width: {PctLow:F1}%;";
+    protected override async Task OnAfterRenderAsync(bool first) {
+        if (first) {
+            try {
+                js = await JS.InvokeAsync<IJSObjectReference>("import", "./js/rangeSlider.js");
+            } catch { }
         }
     }
 
-    protected override async Task OnAfterRenderAsync(bool first)
-    {
-        if (first && !measured) await Measure();
-    }
-
-    private async ValueTask Measure()
-    {
-        try
-        {
-            var w = await JS.InvokeAsync<double>("eval",
-                new[] { "(function(){var e=document.querySelector('.rs-track');return e?e.getBoundingClientRect().width:0})()" });
-            if (w > 0) { trackWidth = w; }
+    private async ValueTask<DomRect> GetTrackRect() {
+        if (js != null) {
+            try { return await js.InvokeAsync<DomRect>("getTrackGeometry", trackEl); } catch { }
         }
-        catch { }
-        if (trackWidth <= 0) trackWidth = 300;
-        // trackLeft will be computed from ClientX - OffsetX on first pointer down
-        measured = true;
+        return new DomRect { Left = 0, Width = 300 };
     }
 
-    private void OnPointerDown(PointerEventArgs e)
-    {
-        if (Max <= Min) return;
-        dragging = true;
-        trackLeft = e.ClientX - e.OffsetX; // compute track's left edge
-        if (trackWidth <= 0) trackWidth = 300;
-        double pct = ((e.ClientX - trackLeft) / trackWidth) * 100;
-        if (RangeMode) { double pL = PctLow, pH = PctHigh; dragLow = Math.Abs(pct - pL) <= Math.Abs(pct - pH); dragHigh = !dragLow; }
-        else dragLow = true;
-        ApplyMove(e.ClientX);
+    private async Task CapturePointer(long id) {
+        if (js != null) try { await js.InvokeVoidAsync("capturePointer", trackEl, id); } catch { }
     }
 
-    private void OnPointerMove(PointerEventArgs e)
-    {
-        if (!dragging) return;
-        ApplyMove(e.ClientX);
+    private async Task ReleasePointer(long id) {
+        if (js != null) try { await js.InvokeVoidAsync("releasePointer", trackEl, id); } catch { }
     }
 
-    private void StopDrag() { dragging = false; dragLow = false; dragHigh = false; }
-
-    private void ApplyMove(double clientX)
-    {
-        double pct = ((clientX - trackLeft) / trackWidth) * 100;
-        pct = Math.Clamp(pct, 0, 100);
-        double val = Min + (pct / 100.0) * (Max - Min);
+    private double ValFromX(double cx) {
+        if (trackWidth <= 0) return LowValue;
+        double rel = Math.Clamp(cx - trackLeft, 0, trackWidth);
+        double val = Min + (rel / trackWidth) * (Max - Min);
         val = Math.Round(val / Step) * Step;
-        val = Math.Clamp(val, Min, Max);
-
-        if (RangeMode)
-        {
-            if (dragLow) Value = Math.Min(val, RangeHigh);
-            else if (dragHigh) RangeHigh = Math.Max(val, Value);
-        }
-        else Value = val;
+        return Math.Clamp(val, Min, Max);
     }
 
-    private async Task OnLowInput(ChangeEventArgs e)
-    {
+    private async Task OnTrackDown(PointerEventArgs e) {
+        var r = await GetTrackRect();
+        trackLeft = r.Left; trackWidth = r.Width;
+        if (trackWidth <= 0) return;
+        double val = ValFromX(e.ClientX);
+        if (RangeMode) {
+            double dL = Math.Abs(val - LowValue), dH = Math.Abs(val - HighValue);
+            dragHigh = dH < dL;
+        }
+        dragging = true;
+        await CapturePointer(e.PointerId);
+        await ApplyValue(val);
+    }
+
+    private async Task OnThumbDown(PointerEventArgs e, bool high) {
+        var r = await GetTrackRect();
+        trackLeft = r.Left; trackWidth = r.Width;
+        dragging = true; dragHigh = high;
+        await CapturePointer(e.PointerId);
+    }
+
+    private async Task OnTrackMove(PointerEventArgs e) {
+        if (!dragging) return;
+        await ApplyValue(ValFromX(e.ClientX));
+    }
+
+    private Task OnPointerUp(PointerEventArgs e) {
+        dragging = false;
+        _ = ReleasePointer(e.PointerId);
+        return Task.CompletedTask;
+    }
+
+    private async Task ApplyValue(double val) {
+        if (RangeMode) {
+            if (dragHigh) {
+                val = Math.Max(val, LowValue);
+                if (Math.Abs(val - HighValue) < 0.01) return;
+                HighValue = val;
+                await HighValueChanged.InvokeAsync(val);
+            } else {
+                val = Math.Min(val, HighValue);
+                if (Math.Abs(val - LowValue) < 0.01) return;
+                LowValue = val;
+                await LowValueChanged.InvokeAsync(val);
+            }
+        } else {
+            if (Math.Abs(val - LowValue) < 0.01) return;
+            LowValue = val;
+            await LowValueChanged.InvokeAsync(val);
+        }
+    }
+
+    private async Task OnLowInput(ChangeEventArgs e) {
         if (double.TryParse(e.Value?.ToString(), out double v))
-        {
-            Value = Math.Clamp(v, Min, RangeMode ? RangeHigh : Max);
-            await ValueChanged.InvokeAsync(Value);
-            if (RangeMode) await RangeChanged.InvokeAsync((Value, RangeHigh));
-        }
+            await ApplyValue(Math.Clamp(v, Min, RangeMode ? HighValue : Max));
     }
 
-    private async Task OnHighInput(ChangeEventArgs e)
-    {
+    private async Task OnHighInput(ChangeEventArgs e) {
         if (double.TryParse(e.Value?.ToString(), out double v))
-        {
-            RangeHigh = Math.Clamp(v, Value, Max);
-            await RangeChanged.InvokeAsync((Value, RangeHigh));
-        }
+            await ApplyValue(Math.Max(v, LowValue));
     }
+
+    public async ValueTask DisposeAsync() { if (js != null) await js.DisposeAsync(); }
 
     private class DomRect { public double Left { get; set; } public double Width { get; set; } }
 }
-
-<style>
-    .rs-wrap { width: 100%; user-select: none; touch-action: none; }
-    .rs-track {
-        position: relative;
-        width: 100%;
-        height: 8px;
-        background: var(--border-color, #333);
-        border-radius: 4px;
-        cursor: pointer;
-        touch-action: none;
-    }
-    .rs-highlight {
-        position: absolute;
-        height: 100%;
-        background: var(--accent-color, #e63946);
-        border-radius: 4px;
-        pointer-events: none;
-    }
-    .rs-thumb {
-        position: absolute;
-        top: 50%;
-        width: 20px; height: 20px;
-        background: #fff;
-        border: 2px solid var(--accent-color, #e63946);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        cursor: grab;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        z-index: 2;
-        pointer-events: none;
-    }
-    .rs-thumb-high { border-color: #c1121f; }
-    .rs-thumb.active { transform: translate(-50%, -50%) scale(1.2); }
-    .rs-inputs {
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-        margin-top: 4px;
-    }
-    .rs-input {
-        flex: 1;
-        max-width: 80px;
-        padding: 2px 6px;
-        border: 1px solid var(--border-color, #333);
-        border-radius: 4px;
-        background: #1a1a1a;
-        color: var(--text-color, #f0f0f0);
-        font-size: 0.8rem;
-        text-align: center;
-    }
-    .rs-sep { font-size: 0.75rem; color: var(--text-muted, #888); }
-</style>

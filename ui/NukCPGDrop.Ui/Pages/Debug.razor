@@ -63,11 +63,11 @@
                 </div>
                 <div class="servo-slider">
                     <RangeSlider Min="0" Max="180" Step="1" RangeMode="true"
-                                 Value="@((double)_svMin[servoIdx])"
-                                 RangeHigh="@((double)_svMax[servoIdx])"
-                                 RangeChanged="(r) => OnSvRange(servoIdx, r)" />
+                                 LowValue="@((double)_svMin[servoIdx])"
+                                 HighValue="@((double)_svMax[servoIdx])"
+                                 LowValueChanged="(v) => OnSvLow(servoIdx, v)"
+                                 HighValueChanged="(v) => OnSvHigh(servoIdx, v)" />
                 </div>
-                <button class="test-btn" @onclick="() => ToggleServo(servoIdx)">Test</button>
             </div>
         }
     </section>
@@ -110,22 +110,14 @@
         StateHasChanged();
     }
 
-    private void OnSvRange(int idx, (double Low, double High) range)
-    {
+    private void OnSvLow(int idx, double v) {
         if (idx < 0 || idx >= 6) return;
-        _svMin[idx] = (int)Math.Clamp(range.Low, 0, 180);
-        _svMax[idx] = (int)Math.Clamp(range.High, 0, 180);
-        if (_svMin[idx] >= _svMax[idx]) _svMin[idx] = _svMax[idx] - 1;
+        _svMin[idx] = (int)Math.Clamp(v, 0, _svMax[idx] - 1);
     }
 
-    private async Task ToggleServo(int idx)
-    {
-        if (_status == null || idx >= _status.Held.Length) return;
-        if (_status.Held[idx])
-            await Api.DropOneAsync(idx + 1);
-        else
-            await Api.HoldOneAsync(idx + 1);
-        await Refresh();
+    private void OnSvHigh(int idx, double v) {
+        if (idx < 0 || idx >= 6) return;
+        _svMax[idx] = (int)Math.Clamp(v, _svMin[idx] + 1, 180);
     }
 
     public void Dispose() => _pollTimer?.Dispose();
