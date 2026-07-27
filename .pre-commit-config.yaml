@@ -93,7 +93,7 @@ repos:
           - tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
           - --break-at
           - "100"
-          - --threshold-break
+          - --threshold-high
           - "100"
           - --since
 
