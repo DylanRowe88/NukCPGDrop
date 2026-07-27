@@ -70,27 +70,25 @@
     {
         try
         {
-            var rect = await JS.InvokeAsync<DomRect>("eval",
-                new[] { "document.querySelector('[blazor-component] .rs-track').getBoundingClientRect()" });
-            if (rect.Width > 0) { trackLeft = rect.Left; trackWidth = rect.Width; measured = true; }
+            var w = await JS.InvokeAsync<double>("eval",
+                new[] { "(function(){var e=document.querySelector('.rs-track');return e?e.getBoundingClientRect().width:0})()" });
+            if (w > 0) { trackWidth = w; }
         }
-        catch { trackWidth = 300; measured = true; }
+        catch { }
+        if (trackWidth <= 0) trackWidth = 300;
+        // trackLeft will be computed from ClientX - OffsetX on first pointer down
+        measured = true;
     }
 
-    private async Task OnPointerDown(PointerEventArgs e)
+    private void OnPointerDown(PointerEventArgs e)
     {
         if (Max <= Min) return;
         dragging = true;
-        await Measure();
+        trackLeft = e.ClientX - e.OffsetX; // compute track's left edge
+        if (trackWidth <= 0) trackWidth = 300;
         double pct = ((e.ClientX - trackLeft) / trackWidth) * 100;
-
-        if (RangeMode)
-        {
-            double pL = PctLow, pH = PctHigh;
-            bool nearL = Math.Abs(pct - pL) <= Math.Abs(pct - pH);
-            dragLow = nearL; dragHigh = !nearL;
-        }
-        else { dragLow = true; }
+        if (RangeMode) { double pL = PctLow, pH = PctHigh; dragLow = Math.Abs(pct - pL) <= Math.Abs(pct - pH); dragHigh = !dragLow; }
+        else dragLow = true;
         ApplyMove(e.ClientX);
     }
 
