@@ -109,6 +109,13 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+static esp_err_t api_reset_handler(httpd_req_t *req) {
+  servos_hold_all();
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, "{\"status\":\"reset\"}");
+  return ESP_OK;
+}
+
 static esp_err_t api_config_handler(httpd_req_t *req) {
   char buf[256];
   int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -223,6 +230,7 @@ static esp_err_t catch_all_handler(httpd_req_t *req) {
 static const httpd_uri_t api_uris[] = {
     {.uri = "/api/status", .method = HTTP_GET, .handler = api_status_handler},
     {.uri = "/api/drop", .method = HTTP_POST, .handler = api_drop_handler},
+    {.uri = "/api/reset", .method = HTTP_POST, .handler = api_reset_handler},
     {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_handler},
 };
 

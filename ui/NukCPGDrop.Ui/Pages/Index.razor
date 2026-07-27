@@ -32,13 +32,25 @@
         <DropStatus Held="@(_status?.Held ?? new bool[6])"
                     DroppingIndex="@_droppingIndex"
                     SequenceActive="@_isRunning" />
+
+        @if (!_isRunning && (_status?.Held.Any(h => !h) ?? false))
+        {
+            <DropButton Label="RESET"
+                        Subtitle="Hold all cans again"
+                        OnClick="ResetAll" />
+        }
     </div>
 
     <div class="status-bar">
-        <span class="hardware-dot @(_pca9685Ok ? "online" : "offline")"
-              title="PCA9685 @(_pca9685Ok ? "detected" : "not found")"></span>
+        <span class="status-label">
+            <span class="hardware-dot @(_pca9685Ok ? "online" : "offline")"></span>
+            PCA9685
+        </span>
         <span>Drops: @(_status?.DropCount ?? 0)</span>
-        <span class="connection-dot @(_connected ? "online" : "offline")"></span>
+        <span class="status-label">
+            ESP
+            <span class="connection-dot @(_connected ? "online" : "offline")"></span>
+        </span>
     </div>
 </div>
 
@@ -115,6 +127,14 @@
         if (_droppingIndex == idx) _droppingIndex = -1;
     }
 
+    private async Task ResetAll()
+    {
+        await Api.ResetAllAsync();
+        _dropCount = 0;
+        _droppingIndex = -1;
+        await RefreshStatus();
+    }
+
     private async Task StartDrop()
     {
         _isRunning = true;
@@ -188,6 +208,11 @@
         padding-top: 1rem;
         font-size: clamp(0.75rem, 2vw, 0.9rem);
         color: var(--text-muted, #666);
+    }
+    .status-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
     }
     .connection-dot, .hardware-dot {
         width: 10px;

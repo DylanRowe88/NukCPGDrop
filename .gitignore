@@ -45,6 +45,12 @@ Thumbs.db
 # Build artifacts
 publish/
 
+# PlatformIO
+firmware/.pio/
+
+# Generated embed binary stubs (data is inline in web_assets.h)
+firmware/main/include/gz_*
+
 # Pre-commit
 .pre-commit-config.yaml.bak
 

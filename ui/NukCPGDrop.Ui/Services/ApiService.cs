@@ -45,6 +45,16 @@ public class ApiService
         catch { return false; }
     }
 
+    public async Task<bool> ResetAllAsync()
+    {
+        try
+        {
+            var response = await _http.PostAsync("/api/reset", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
     public async Task<bool> UpdateConfigAsync(DropConfiguration config)
     {
         try

@@ -1,12 +1,12 @@
 :root {
-    --bg-color: #fafafa;
-    --text-color: #1a1a1a;
-    --text-muted: #666;
+    --bg-color: #0d0d0d;
+    --text-color: #f0f0f0;
+    --text-muted: #888;
     --accent-color: #e63946;
-    --border-color: #ddd;
-    --slot-bg: #f0f0f0;
-    --held-bg: #d4edda;
-    --dropped-bg: #f8d7da;
+    --border-color: #333;
+    --slot-bg: #1a1a1a;
+    --held-bg: #1a3a1a;
+    --dropped-bg: #3a1a1a;
     font-size: 16px;
 }
 
