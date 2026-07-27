@@ -76,22 +76,8 @@ repos:
             if ($LASTEXITCODE -ne 0) { exit 1 };
             Pop-Location
 
-      - id: stryker-mutation
-        name: Stryker mutation testing
-        language: system
-        pass_filenames: false
-        always_run: false
-        stages: [pre-push]
-        entry: dotnet
-        args:
-          - tool
-          - run
-          - dotnet-stryker
-          - --project
-          - ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
-          - --test-project
-          - tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
-          - --since
+      # Stryker mutation testing is in CI only (.github/workflows/ci.yml)
+      # due to Blazor WASM top-level statements limitation (CS8805).
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
