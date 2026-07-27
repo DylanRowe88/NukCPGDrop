@@ -35,18 +35,34 @@ public class WifiInfo
 
 public class SystemStatus
 {
+    [JsonPropertyName("difficulty")]
     public int Difficulty { get; set; }
+
+    [JsonPropertyName("double_drop")]
     public bool DoubleDrop { get; set; }
+
+    [JsonPropertyName("drop_count")]
     public int DropCount { get; set; }
+
+    [JsonPropertyName("held")]
     public bool[] Held { get; set; } = new bool[6];
 
     [JsonPropertyName("pca9685_present")]
     public bool Pca9685Present { get; set; }
 
+    [JsonPropertyName("custom_interval")]
     public int CustomInterval { get; set; }
+
+    [JsonPropertyName("range_min")]
     public int RangeMin { get; set; }
+
+    [JsonPropertyName("range_max")]
     public int RangeMax { get; set; }
+
+    [JsonPropertyName("led")]
     public LedColor? Led { get; set; }
+
+    [JsonPropertyName("wifi")]
     public WifiInfo? Wifi { get; set; }
 }
 
