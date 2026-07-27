@@ -265,18 +265,19 @@ def _netsh(args):
 def _find_builtin_wifi():
     """Return the name of the built-in WiFi adapter (not USB)."""
     r = _netsh(["wlan", "show", "interfaces"])
-    for block in r.stdout.split('\n\n'):
-        lines = block.strip().split('\n')
-        name = None
-        desc = None
-        for line in lines:
-            m = re.match(r'\s+Name\s+:\s+(.+)', line)
-            if m: name = m.group(1).strip()
-            m = re.match(r'\s+Description\s+:\s+(.+)', line)
-            if m: desc = m.group(1).strip()
-        if name and desc:
-            if 'Wireless USB' not in desc and 'USB LAN' not in desc:
-                return name
+    current_name = None
+    current_desc = None
+    for line in r.stdout.splitlines():
+        m = re.match(r'\s+Name\s+:\s+(.+)', line)
+        if m: current_name = m.group(1).strip()
+        m = re.match(r'\s+Description\s+:\s+(.+)', line)
+        if m:
+            current_desc = m.group(1).strip()
+            if current_name and current_desc:
+                if 'USB' not in current_desc.upper():
+                    return current_name
+                current_name = None
+                current_desc = None
     return None
 
 def _connect_esp_ap(iface, ssid_prefix):
