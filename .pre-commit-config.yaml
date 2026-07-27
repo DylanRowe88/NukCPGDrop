@@ -91,10 +91,6 @@ repos:
           - ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
           - --test-project
           - tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
-          - --break-at
-          - "100"
-          - --threshold-high
-          - "100"
           - --since
 
   - repo: https://github.com/pre-commit/pre-commit-hooks

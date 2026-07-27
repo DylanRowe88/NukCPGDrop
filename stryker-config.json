@@ -1,13 +1,15 @@
 {
   "stryker-config": {
     "project": "ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj",
-    "test-project": "tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj",
-    "break-at": 100,
-    "threshold-break": 100,
-    "threshold-high": 95,
-    "threshold-low": 90,
+    "test-projects": [
+      "tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj"
+    ],
     "target-framework": "net8.0",
-    "excluded-mutations": ["string"],
+    "thresholds": {
+      "high": 100,
+      "low": 90,
+      "break": 100
+    },
     "since": {
       "enabled": true,
       "target": "main"
