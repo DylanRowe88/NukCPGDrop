@@ -1,22 +1,28 @@
 @using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
 
-<div class="rs-container">
-    <div class="rs-track"
-         @ref="trackRef"
+<div class="rs-wrap">
+    <div class="rs-track" @ref="trackEl"
          @onpointerdown="OnPointerDown"
          @onpointermove="OnPointerMove"
          @onpointerup="StopDrag"
          @onpointerleave="StopDrag"
          @onpointercancel="StopDrag">
         <div class="rs-highlight" style="@HighlightStyle"></div>
-        <div class="rs-thumb" style="left: @(PctLow)%"
-             @onpointerdown="(e) => StartDrag(e, false)"
-             @onpointermove="(e) => OnPointerMove(e)"></div>
+        <div class="rs-thumb @(dragLow ? "active" : "")" style="left: @(PctLow)%"></div>
         @if (RangeMode)
         {
-            <div class="rs-thumb rs-thumb-high" style="left: @(PctHigh)%"
-                 @onpointerdown="(e) => StartDrag(e, true)"
-                 @onpointermove="(e) => OnPointerMove(e)"></div>
+            <div class="rs-thumb rs-thumb-high @(dragHigh ? "active" : "")" style="left: @(PctHigh)%"></div>
+        }
+    </div>
+    <div class="rs-inputs">
+        <input class="rs-input" type="number" min="@Min" max="@(RangeMode ? RangeHigh : Max)" step="@Step"
+               value="@ValueDisplay(Value)" @onchange="OnLowInput" />
+        @if (RangeMode)
+        {
+            <span class="rs-sep">to</span>
+            <input class="rs-input" type="number" min="@Value" max="@Max" step="@Step"
+                   value="@ValueDisplay(RangeHigh)" @onchange="OnHighInput" />
         }
     </div>
 </div>
@@ -24,21 +30,22 @@
 @code {
     [Parameter] public double Min { get; set; } = 0;
     [Parameter] public double Max { get; set; } = 100;
+    [Parameter] public double Step { get; set; } = 1;
     [Parameter] public double Value { get; set; } = 50;
-    [Parameter] public double RangeLow { get; set; } = 20;
     [Parameter] public double RangeHigh { get; set; } = 80;
     [Parameter] public bool RangeMode { get; set; }
-    [Parameter] public string Format { get; set; } = "F0";
     [Parameter] public EventCallback<double> ValueChanged { get; set; }
     [Parameter] public EventCallback<(double Low, double High)> RangeChanged { get; set; }
 
-    private ElementReference trackRef;
-    private bool _dragging;
-    private bool _dragHigh;
-    private double _trackWidth = 300;
+    private ElementReference trackEl;
+    private bool dragging, dragLow, dragHigh;
+    private double trackLeft = 0, trackWidth = 300;
+    private bool measured;
 
-    private double PctLow => ((Value - Min) / (Max - Min)) * 100;
-    private double PctHigh => ((RangeHigh - Min) / (Max - Min)) * 100;
+    private string ValueDisplay(double v) => ((int)Math.Round(v)).ToString();
+
+    private double PctLow => Max > Min ? ((Value - Min) / (Max - Min)) * 100 : 0;
+    private double PctHigh => Max > Min ? ((RangeHigh - Min) / (Max - Min)) * 100 : 0;
 
     private string HighlightStyle
     {
@@ -46,77 +53,95 @@
         {
             if (RangeMode)
             {
-                double left = PctLow;
-                double width = PctHigh - left;
-                return $"left: {left:F1}%; width: {width:F1}%;";
+                double l = Math.Min(PctLow, PctHigh);
+                double r = Math.Max(PctLow, PctHigh);
+                return $"left: {l:F1}%; width: {r - l:F1}%;";
             }
             return $"left: 0%; width: {PctLow:F1}%;";
         }
     }
 
-    private void StartDrag(PointerEventArgs e, bool isHigh)
+    protected override async Task OnAfterRenderAsync(bool first)
     {
-        _dragging = true;
-        _dragHigh = isHigh;
+        if (first && !measured) await Measure();
     }
 
-    private void StopDrag()
+    private async ValueTask Measure()
     {
-        _dragging = false;
+        try
+        {
+            var rect = await JS.InvokeAsync<DomRect>("eval",
+                new[] { "document.querySelector('[blazor-component] .rs-track').getBoundingClientRect()" });
+            if (rect.Width > 0) { trackLeft = rect.Left; trackWidth = rect.Width; measured = true; }
+        }
+        catch { trackWidth = 300; measured = true; }
     }
 
     private async Task OnPointerDown(PointerEventArgs e)
     {
-        _dragging = true;
-        _dragHigh = false;
-        await UpdateFromEvent(e);
-    }
+        if (Max <= Min) return;
+        dragging = true;
+        await Measure();
+        double pct = ((e.ClientX - trackLeft) / trackWidth) * 100;
 
-    private async Task OnPointerMove(PointerEventArgs e)
-    {
-        if (!_dragging) return;
-        await UpdateFromEvent(e);
-    }
-
-    private async Task UpdateFromEvent(PointerEventArgs e)
-    {
-        if (_trackWidth <= 0) return;
-        double relX = Math.Clamp(e.OffsetX, 0, _trackWidth);
-        double newVal = Min + (relX / _trackWidth) * (Max - Min);
-
-        if (RangeMode && _dragHigh)
+        if (RangeMode)
         {
-            RangeHigh = Math.Max(newVal, Value);
-            RangeHigh = Math.Min(RangeHigh, Max);
+            double pL = PctLow, pH = PctHigh;
+            bool nearL = Math.Abs(pct - pL) <= Math.Abs(pct - pH);
+            dragLow = nearL; dragHigh = !nearL;
+        }
+        else { dragLow = true; }
+        ApplyMove(e.ClientX);
+    }
+
+    private void OnPointerMove(PointerEventArgs e)
+    {
+        if (!dragging) return;
+        ApplyMove(e.ClientX);
+    }
+
+    private void StopDrag() { dragging = false; dragLow = false; dragHigh = false; }
+
+    private void ApplyMove(double clientX)
+    {
+        double pct = ((clientX - trackLeft) / trackWidth) * 100;
+        pct = Math.Clamp(pct, 0, 100);
+        double val = Min + (pct / 100.0) * (Max - Min);
+        val = Math.Round(val / Step) * Step;
+        val = Math.Clamp(val, Min, Max);
+
+        if (RangeMode)
+        {
+            if (dragLow) Value = Math.Min(val, RangeHigh);
+            else if (dragHigh) RangeHigh = Math.Max(val, Value);
+        }
+        else Value = val;
+    }
+
+    private async Task OnLowInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out double v))
+        {
+            Value = Math.Clamp(v, Min, RangeMode ? RangeHigh : Max);
+            await ValueChanged.InvokeAsync(Value);
+            if (RangeMode) await RangeChanged.InvokeAsync((Value, RangeHigh));
+        }
+    }
+
+    private async Task OnHighInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out double v))
+        {
+            RangeHigh = Math.Clamp(v, Value, Max);
             await RangeChanged.InvokeAsync((Value, RangeHigh));
         }
-        else
-        {
-            Value = RangeMode ? Math.Min(newVal, RangeHigh) : Math.Min(newVal, Max);
-            Value = Math.Max(Value, Min);
-            if (RangeMode)
-                await RangeChanged.InvokeAsync((Value, RangeHigh));
-            else
-                await ValueChanged.InvokeAsync(Value);
-        }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _trackWidth = 300;
-        }
-    }
+    private class DomRect { public double Left { get; set; } public double Width { get; set; } }
 }
 
 <style>
-    .rs-container {
-        width: 100%;
-        padding: 4px 0;
-        user-select: none;
-        touch-action: none;
-    }
+    .rs-wrap { width: 100%; user-select: none; touch-action: none; }
     .rs-track {
         position: relative;
         width: 100%;
@@ -124,6 +149,7 @@
         background: var(--border-color, #333);
         border-radius: 4px;
         cursor: pointer;
+        touch-action: none;
     }
     .rs-highlight {
         position: absolute;
@@ -135,16 +161,34 @@
     .rs-thumb {
         position: absolute;
         top: 50%;
-        width: 20px;
-        height: 20px;
+        width: 20px; height: 20px;
         background: #fff;
         border: 2px solid var(--accent-color, #e63946);
         border-radius: 50%;
         transform: translate(-50%, -50%);
         cursor: grab;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        z-index: 1;
+        z-index: 2;
+        pointer-events: none;
     }
-    .rs-thumb:active { cursor: grabbing; transform: translate(-50%, -50%) scale(1.15); }
     .rs-thumb-high { border-color: #c1121f; }
+    .rs-thumb.active { transform: translate(-50%, -50%) scale(1.2); }
+    .rs-inputs {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 4px;
+    }
+    .rs-input {
+        flex: 1;
+        max-width: 80px;
+        padding: 2px 6px;
+        border: 1px solid var(--border-color, #333);
+        border-radius: 4px;
+        background: #1a1a1a;
+        color: var(--text-color, #f0f0f0);
+        font-size: 0.8rem;
+        text-align: center;
+    }
+    .rs-sep { font-size: 0.75rem; color: var(--text-muted, #888); }
 </style>

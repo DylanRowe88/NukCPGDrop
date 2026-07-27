@@ -21,7 +21,7 @@
             RangeChanged="OnRangeChangedAsync"
             OnDoubleDropChanged="OnDoubleDropChangedAsync" />
 
-        @if (allHeld)
+        @if (_allHeld)
         {
             <DropButton Label="DROP ALL"
                         Subtitle="Start random sequence"
@@ -55,6 +55,9 @@
 
     <div class="status-bar">
         <span>Drops: @TotalDrops</span>
+        <span class="rssi-indicator" title="RSSI: @(_status?.Wifi?.Rssi ?? 0) dBm">
+            @RssiBars
+        </span>
         <div class="status-right">
             @if (_status?.Led != null)
             {
@@ -90,10 +93,23 @@
         ? Math.Min(100, _dropCount / 3.0 * 100)
         : Math.Min(100, _dropCount / 6.0 * 100);
 
+    private string RssiBars
+    {
+        get
+        {
+            int r = _status?.Wifi?.Rssi ?? -100;
+            if (r > -50) return "\u25A0\u25A0\u25A0\u25A0\u25A0";
+            if (r > -60) return "\u25A0\u25A0\u25A0\u25A0\u25A1";
+            if (r > -70) return "\u25A0\u25A0\u25A0\u25A1\u25A1";
+            if (r > -80) return "\u25A0\u25A0\u25A1\u25A1\u25A1";
+            return "\u25A0\u25A1\u25A1\u25A1\u25A1";
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await RefreshStatus();
-        _pollTimer = new Timer(async _ => await InvokeAsync(RefreshStatus), null, 500, 800);
+        _pollTimer = new Timer(async _ => await InvokeAsync(RefreshStatus), null, 500, 2000);
     }
 
     private async Task RefreshStatus()
@@ -118,14 +134,13 @@
                     _isRunning = true;
                     _dropCount += droppedNow;
                     _doubleDrop = _status.DoubleDrop;
-
                     for (int i = 0; i < 6; i++)
                         if (prev.Held[i] && !_status.Held[i])
                             _ = AnimateDrop(i);
                 }
 
-                int threshold = _status.DoubleDrop ? 3 : 6;
                 int heldCount = _status.Held.Count(h => h);
+                int threshold = _status.DoubleDrop ? 3 : 6;
                 if (heldCount == 0 || _dropCount >= threshold)
                 {
                     _isRunning = false;
@@ -134,183 +149,53 @@
                 }
             }
         }
-
         State.NotifyStateChanged();
         StateHasChanged();
     }
 
-    private async Task AnimateDrop(int idx)
-    {
-        _droppingIndex = idx;
-        StateHasChanged();
-        await Task.Delay(500);
-        if (_droppingIndex == idx) _droppingIndex = -1;
-    }
+    private async Task AnimateDrop(int idx) { _droppingIndex = idx; StateHasChanged(); await Task.Delay(500); if (_droppingIndex == idx) _droppingIndex = -1; }
 
     private async Task OnToggleCan(int idx)
     {
         if (_status == null || idx >= _status.Held.Length) return;
-        if (_status.Held[idx])
-            await Api.DropOneAsync(idx + 1);
-        else
-            await Api.HoldOneAsync(idx + 1);
+        if (_status.Held[idx]) await Api.DropOneAsync(idx + 1); else await Api.HoldOneAsync(idx + 1);
         await RefreshStatus();
     }
 
     private async Task ResetAll()
     {
         await Api.ResetAllAsync();
-        _dropCount = 0;
-        _droppingIndex = -1;
-        _isRunning = false;
+        _dropCount = 0; _droppingIndex = -1; _isRunning = false;
         await RefreshStatus();
     }
 
     private async Task StartDrop()
     {
-        _isRunning = true;
-        _dropCount = 0;
-        _doubleDrop = _status?.DoubleDrop ?? false;
-        var config = new DropConfiguration
-        {
-            Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short,
-            DoubleDrop = _doubleDrop,
-        };
-        config.CustomInterval = _randomEnabled ? 0 : _interval;
-        config.RangeMin = _rangeMin;
-        config.RangeMax = _rangeMax;
-        await Api.UpdateConfigAsync(config);
+        _isRunning = true; _dropCount = 0; _doubleDrop = _status?.DoubleDrop ?? false;
+        var c = new DropConfiguration { Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short, DoubleDrop = _doubleDrop, CustomInterval = _randomEnabled ? 0 : _interval, RangeMin = _rangeMin, RangeMax = _rangeMax };
+        await Api.UpdateConfigAsync(c);
         await Api.DropAllAsync();
     }
 
-    private async Task OnIntervalChangedAsync(int val)
-    {
-        _interval = val;
-        var config = new DropConfiguration
-        {
-            Difficulty = Difficulty.Short,
-            DoubleDrop = _doubleDrop,
-            CustomInterval = val,
-        };
-        await Api.UpdateConfigAsync(config);
-    }
-
-    private async Task OnRandomToggledAsync(bool val)
-    {
-        _randomEnabled = val;
-        var config = new DropConfiguration
-        {
-            Difficulty = val ? Difficulty.Random : Difficulty.Short,
-            DoubleDrop = _doubleDrop,
-            RangeMin = _rangeMin,
-            RangeMax = _rangeMax,
-        };
-        await Api.UpdateConfigAsync(config);
-    }
-
-    private async Task OnRangeChangedAsync((int Min, int Max) range)
-    {
-        _rangeMin = range.Min;
-        _rangeMax = range.Max;
-        if (_randomEnabled)
-        {
-            var config = new DropConfiguration
-            {
-                Difficulty = Difficulty.Random,
-                DoubleDrop = _doubleDrop,
-                RangeMin = _rangeMin,
-                RangeMax = _rangeMax,
-            };
-            await Api.UpdateConfigAsync(config);
-        }
-    }
-
-    private async Task OnDoubleDropChangedAsync(bool val)
-    {
-        _doubleDrop = val;
-        var config = new DropConfiguration
-        {
-            Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short,
-            DoubleDrop = val,
-            CustomInterval = _interval,
-        };
-        await Api.UpdateConfigAsync(config);
-    }
-
-    public void Dispose()
-    {
-        _pollTimer?.Dispose();
-    }
+    private async Task OnIntervalChangedAsync(int v) { _interval = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Short, DoubleDrop = _doubleDrop, CustomInterval = v }); }
+    private async Task OnRandomToggledAsync(bool v) { _randomEnabled = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = v ? Difficulty.Random : Difficulty.Short, DoubleDrop = _doubleDrop, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
+    private async Task OnRangeChangedAsync((int Min, int Max) r) { _rangeMin = r.Min; _rangeMax = r.Max; if (_randomEnabled) await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, DoubleDrop = _doubleDrop, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
+    private async Task OnDoubleDropChangedAsync(bool v) { _doubleDrop = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short, DoubleDrop = v, CustomInterval = _interval }); }
+    public void Dispose() => _pollTimer?.Dispose();
 }
 
 <style>
-    .app-shell {
-        max-width: 480px;
-        margin: 0 auto;
-        padding: clamp(0.5rem, 3vw, 2rem);
-        min-height: 100dvh;
-        display: flex;
-        flex-direction: column;
-    }
-    .logo-bar {
-        background: linear-gradient(180deg, #1a1a1a 0%, var(--bg-color, #0d0d0d) 100%);
-        border-bottom: 1px solid var(--border-color, #333);
-        margin: -0.5rem -2rem 0;
-        padding: 0.5rem 2rem 0;
-        width: calc(100% + 4rem);
-    }
-    .main-controls {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 0.75rem;
-    }
-    .sequence-progress {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .progress-bar {
-        flex: 1;
-        height: 8px;
-        background: var(--border-color, #333);
-        border-radius: 4px;
-        overflow: hidden;
-    }
-    .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--accent-color, #e63946), #c1121f);
-        border-radius: 4px;
-        transition: width 0.3s ease;
-    }
-    .progress-label {
-        font-size: clamp(0.75rem, 2vw, 0.9rem);
-        color: var(--text-muted, #888);
-        min-width: 2rem;
-        text-align: right;
-    }
-    .status-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-top: 1rem;
-        font-size: clamp(0.65rem, 1.8vw, 0.8rem);
-        color: var(--text-muted, #888);
-    }
-    .status-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-    }
-    .connection-dot, .hardware-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #333;
-        transition: background 0.3s;
-        display: inline-block;
-    }
-    .connection-dot.online { background: #28a745; }
-    .hardware-dot.online { background: #28a745; }
+    .app-shell { max-width: 480px; margin: 0 auto; padding: clamp(0.5rem, 3vw, 2rem); min-height: 100dvh; display: flex; flex-direction: column; }
+    .logo-bar { background: linear-gradient(180deg, #1a1a1a 0%, var(--bg-color, #0d0d0d) 100%); border-bottom: 1px solid var(--border-color, #333); margin: -0.5rem -2rem 0; padding: 0.5rem 2rem 0; width: calc(100% + 4rem); }
+    .main-controls { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 0.75rem; }
+    .sequence-progress { display: flex; align-items: center; gap: 0.75rem; }
+    .progress-bar { flex: 1; height: 8px; background: var(--border-color, #333); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-color, #e63946), #c1121f); border-radius: 4px; transition: width 0.3s ease; }
+    .progress-label { font-size: clamp(0.75rem, 2vw, 0.9rem); color: var(--text-muted, #888); min-width: 2rem; text-align: right; }
+    .status-bar { display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; font-size: clamp(0.65rem, 1.8vw, 0.8rem); color: var(--text-muted, #888); }
+    .status-right { display: flex; align-items: center; gap: 0.5rem; }
+    .rssi-indicator { font-size: clamp(0.7rem, 1.5vw, 0.85rem); letter-spacing: 1px; cursor: default; }
+    .led-twin { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid #555; transition: background 0.3s; }
+    .debug-link { color: var(--text-muted, #555); text-decoration: none; font-size: clamp(0.55rem, 1.5vw, 0.7rem); text-transform: uppercase; letter-spacing: 0.1em; }
+    .debug-link:hover { color: var(--accent-color, #e63946); }
 </style>

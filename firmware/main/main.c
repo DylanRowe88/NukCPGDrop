@@ -2,6 +2,7 @@
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led.h"
@@ -12,6 +13,8 @@
 #include "web_server.h"
 #include "wifi_manager.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 static const char *TAG = "nukcpgdrop";
 bool g_pca9685_present = false;
@@ -34,6 +37,7 @@ static void start_mdns(void) {
 
 void app_main(void) {
   ESP_LOGI(TAG, "NukCPGDrop starting...");
+  srand((unsigned)esp_log_timestamp());
 
   // Init RGB LED first for boot feedback
   led_init();

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace NukCPGDrop.Ui.Models;
 
 public enum Difficulty
@@ -24,17 +26,28 @@ public class LedColor
     public int B { get; set; }
 }
 
+public class WifiInfo
+{
+    public int Rssi { get; set; }
+    public int Clients { get; set; }
+    public string Version { get; set; } = "";
+}
+
 public class SystemStatus
 {
     public int Difficulty { get; set; }
     public bool DoubleDrop { get; set; }
     public int DropCount { get; set; }
     public bool[] Held { get; set; } = new bool[6];
+
+    [JsonPropertyName("pca9685_present")]
     public bool Pca9685Present { get; set; }
+
     public int CustomInterval { get; set; }
     public int RangeMin { get; set; }
     public int RangeMax { get; set; }
     public LedColor? Led { get; set; }
+    public WifiInfo? Wifi { get; set; }
 }
 
 public class DropCommand

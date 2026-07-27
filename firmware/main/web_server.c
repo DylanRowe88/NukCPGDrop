@@ -10,6 +10,7 @@
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"
+#include "wifi_manager.h"
 #include <string.h>
 
 static const char *TAG = "web";
@@ -82,6 +83,12 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(led, "g", lc.g);
   cJSON_AddNumberToObject(led, "b", lc.b);
   cJSON_AddItemToObject(root, "led", led);
+
+  cJSON *wifi = cJSON_CreateObject();
+  cJSON_AddNumberToObject(wifi, "rssi", wifi_ap_get_rssi());
+  cJSON_AddNumberToObject(wifi, "clients", wifi_ap_get_sta_count());
+  cJSON_AddStringToObject(wifi, "version", IDF_VER);
+  cJSON_AddItemToObject(root, "wifi", wifi);
 
   const char *json = cJSON_Print(root);
   httpd_resp_set_type(req, "application/json");
@@ -203,6 +210,12 @@ static const char *captive_probes[] = {
     "/check_network_status.txt",
     "/ncsi.txt",
     "/fwlink/",
+    "/fwlink",
+    "/success.txt",
+    "/canonical.html",
+    "/gen_204",
+    "/redirect",
+    "/favicon.ico",
     NULL,
 };
 

@@ -56,3 +56,18 @@ esp_err_t wifi_ap_stop(void) {
 const char *wifi_ap_get_ssid(void) { return g_ssid; }
 
 const char *wifi_ap_get_ip(void) { return "192.168.4.1"; }
+
+int wifi_ap_get_sta_count(void) {
+  wifi_sta_list_t sta;
+  esp_wifi_ap_get_sta_list(&sta);
+  return sta.num;
+}
+
+int wifi_ap_get_rssi(void) {
+  wifi_sta_list_t sta;
+  esp_wifi_ap_get_sta_list(&sta);
+  if (sta.num == 0)
+    return -100;
+  // Return RSSI of first connected station
+  return sta.sta[0].rssi;
+}
