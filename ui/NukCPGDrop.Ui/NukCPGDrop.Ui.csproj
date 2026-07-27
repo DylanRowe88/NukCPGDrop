@@ -7,6 +7,9 @@
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
     <BlazorWebAssemblyCompressAll>true</BlazorWebAssemblyCompressAll>
     <RunAOTCompilation>false</RunAOTCompilation>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
+    <BlazorWebAssemblyPreserveCollationData>false</BlazorWebAssemblyPreserveCollationData>
   </PropertyGroup>
 
   <ItemGroup>

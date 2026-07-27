@@ -34,8 +34,49 @@ FIRMWARE_DIR = REPO_ROOT / "firmware"
 UI_DIR = REPO_ROOT / "ui" / "NukCPGDrop.Ui"
 TEST_DIR = REPO_ROOT / "tests" / "NukCPGDrop.Ui.Tests"
 
+IDF_PYTHON = "C:/Users/thedy/.espressif/python_env/idf5.2_py3.14_env/Scripts/python.exe"
+IDF_PATH = "C:/Users/thedy/source/repos/esp-idf"
+IDF_PYTHON_ENV_PATH = "C:/Users/thedy/.espressif/python_env/idf5.2_py3.14_env"
+
+IDF_ENV = {
+    "IDF_PATH": IDF_PATH,
+    "IDF_PYTHON_ENV_PATH": IDF_PYTHON_ENV_PATH,
+    "PATH": os.pathsep.join([
+        "C:/Users/thedy/.espressif/tools/xtensa-esp-elf/esp-13.2.0_20230928/xtensa-esp-elf/bin",
+        "C:/Users/thedy/.espressif/tools/riscv32-esp-elf/esp-13.2.0_20230928/riscv32-esp-elf/bin",
+        "C:/Users/thedy/.espressif/tools/esp32ulp-elf/2.35_20220830/esp32ulp-elf/bin",
+        "C:/Users/thedy/.espressif/tools/cmake/3.24.0/bin",
+        "C:/Users/thedy/.espressif/tools/openocd-esp32/v0.12.0-esp32-20230921/openocd-esp32/bin",
+        "C:/Users/thedy/.espressif/tools/ninja/1.11.1",
+        "C:/Users/thedy/.espressif/tools/idf-exe/1.0.3",
+        "C:/Users/thedy/.espressif/tools/ccache/4.8/ccache-4.8-windows-x86_64",
+        "C:/Users/thedy/.espressif/tools/dfu-util/0.11/dfu-util-0.11-win64",
+        f"{IDF_PYTHON_ENV_PATH}/Scripts",
+        f"{IDF_PATH}/tools",
+        os.environ.get("PATH", ""),
+    ]),
+}
+
 
 # ── helpers ──────────────────────────────────────────────────────────
+
+def idf_run(args, cwd=None, capture=False, check=True):
+    cwd = cwd or REPO_ROOT
+    cmd = [IDF_PYTHON, f"{IDF_PATH}/tools/idf.py"] + args
+    print(f"  > {' '.join(cmd)}")
+    env = os.environ.copy()
+    env.update(IDF_ENV)
+    if capture:
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
+        if check and r.returncode != 0:
+            print(r.stderr)
+            sys.exit(r.returncode)
+        return r
+    r = subprocess.run(cmd, cwd=cwd, env=env)
+    if check and r.returncode != 0:
+        sys.exit(r.returncode)
+    return r
+
 
 def run(cmd, cwd=None, capture=False, check=True):
     cwd = cwd or REPO_ROOT
@@ -53,7 +94,7 @@ def run(cmd, cwd=None, capture=False, check=True):
 
 
 def step(label):
-    print(f"\n━━━ {label} ━━━")
+    print(f"\n=== {label} ===")
 
 
 # ── port detection ───────────────────────────────────────────────────
@@ -148,13 +189,13 @@ def embed_web():
 
 def build_firmware():
     step("Build: ESP-IDF firmware")
-    run(["idf.py", "build"], cwd=FIRMWARE_DIR)
+    idf_run(["build"], cwd=FIRMWARE_DIR)
 
 
 def test_firmware():
     step("Test: Firmware unit tests (QEMU)")
     try:
-        run(["idf.py", "test"], cwd=FIRMWARE_DIR, check=False)
+        idf_run(["test"], cwd=FIRMWARE_DIR, check=False)
         print("  (QEMU tests passed or skipped)")
     except FileNotFoundError:
         print("  [skip] QEMU not available")
@@ -181,12 +222,10 @@ def flash_firmware(port):
 
     if is_native_usb:
         print("  Native USB port — using direct serial, no RTS/DTR needed")
-        run(["idf.py", "-p", port, "-b", "921600", "flash"],
-            cwd=FIRMWARE_DIR)
+        idf_run(["-p", port, "-b", "921600", "flash"], cwd=FIRMWARE_DIR)
     else:
         print("  UART bridge port — using RTS/DTR for bootloader entry")
-        run(["idf.py", "-p", port, "-b", "460800",
-             "flash"], cwd=FIRMWARE_DIR)
+        idf_run(["-p", port, "-b", "460800", "flash"], cwd=FIRMWARE_DIR)
 
 
 def verify_flash(port):
@@ -232,7 +271,7 @@ def verify_flash(port):
 
 def serial_monitor(port):
     step(f"Monitor: opening serial on {port}")
-    run(["idf.py", "-p", port, "monitor"], cwd=FIRMWARE_DIR)
+    idf_run(["-p", port, "monitor"], cwd=FIRMWARE_DIR)
 
 
 # ── main ─────────────────────────────────────────────────────────────

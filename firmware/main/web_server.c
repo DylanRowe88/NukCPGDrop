@@ -185,13 +185,10 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
   for (size_t i = 0; i < web_assets_count; i++) {
     if (strcmp(lookup, web_assets[i].path) == 0) {
       httpd_resp_set_type(req, web_assets[i].mime);
-      if (web_assets[i].compressed_len &&
-          web_assets[i].compressed_len < web_assets[i].len)
+      if (web_assets[i].len < web_assets[i].raw_len)
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
       httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
-      size_t send_len = web_assets[i].compressed_len
-                            ? web_assets[i].compressed_len
-                            : web_assets[i].len;
+      size_t send_len = web_assets[i].len;
       httpd_resp_send(req, (const char *)web_assets[i].data, send_len);
       return ESP_OK;
     }
