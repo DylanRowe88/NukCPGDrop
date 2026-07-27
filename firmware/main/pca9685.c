@@ -16,6 +16,7 @@
 
 struct pca9685_t {
   i2c_master_dev_handle_t dev_handle;
+  i2c_master_bus_handle_t bus_handle;
   uint8_t addr;
   uint16_t channel_cache[16];
   bool initialized;
@@ -29,11 +30,8 @@ static esp_err_t pca9685_write_reg(pca9685_t *dev, uint8_t reg, uint8_t value) {
 }
 
 static esp_err_t pca9685_read_reg(pca9685_t *dev, uint8_t reg, uint8_t *value) {
-  esp_err_t ret =
-      i2c_master_transmit(dev->dev_handle, &reg, 1, pdMS_TO_TICKS(10));
-  if (ret != ESP_OK)
-    return ret;
-  return i2c_master_receive(dev->dev_handle, value, 1, pdMS_TO_TICKS(10));
+  return i2c_master_transmit_receive(dev->dev_handle, &reg, 1, value, 1,
+                                     pdMS_TO_TICKS(10));
 }
 
 esp_err_t pca9685_init(pca9685_t **out, const pca9685_config_t *cfg) {
@@ -51,8 +49,7 @@ esp_err_t pca9685_init(pca9685_t **out, const pca9685_config_t *cfg) {
       .flags.enable_internal_pullup = true,
   };
 
-  i2c_master_bus_handle_t bus_handle;
-  ret = i2c_new_master_bus(&bus_cfg, &bus_handle);
+  ret = i2c_new_master_bus(&bus_cfg, &dev->bus_handle);
   if (ret != ESP_OK) {
     free(dev);
     return ret;
@@ -64,7 +61,7 @@ esp_err_t pca9685_init(pca9685_t **out, const pca9685_config_t *cfg) {
       .scl_speed_hz = cfg->clk_speed,
   };
 
-  ret = i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev->dev_handle);
+  ret = i2c_master_bus_add_device(dev->bus_handle, &dev_cfg, &dev->dev_handle);
   if (ret != ESP_OK) {
     free(dev);
     return ret;
@@ -166,9 +163,8 @@ esp_err_t pca9685_set_outputs(pca9685_t *dev, uint8_t outputs_enabled) {
 }
 
 bool pca9685_is_present(pca9685_t *dev) {
-  if (!dev)
+  if (!dev || !dev->bus_handle)
     return false;
-  esp_err_t ret =
-      i2c_master_transmit(dev->dev_handle, NULL, 0, pdMS_TO_TICKS(50));
+  esp_err_t ret = i2c_master_probe(dev->bus_handle, dev->addr, 50);
   return (ret == ESP_OK);
 }
