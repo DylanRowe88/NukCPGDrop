@@ -42,10 +42,14 @@ esp_err_t wifi_ap_start(void) {
   };
   esp_netif_set_ip_info(netif, &ap_ip);
 
-  // Disable NVS for WiFi calibration — unnecessary in QEMU and prevents
-  // the driver from failing when the NVS partition is minimal.
+  // Disable NVS for WiFi calibration in QEMU (no real RF hardware, no
+  // valid calibration data). On real hardware, keep NVS enabled so the
+  // driver persists calibration data as normal.
+  esp_chip_info_t chip;
+  esp_chip_info(&chip);
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  cfg.nvs_enable = false;
+  if (chip.revision == 0)
+    cfg.nvs_enable = false;
   esp_err_t w_ret = esp_wifi_init(&cfg);
   if (w_ret != ESP_OK) {
     ESP_LOGW(TAG, "wifi init failed (0x%x) — continuing without WiFi", w_ret);

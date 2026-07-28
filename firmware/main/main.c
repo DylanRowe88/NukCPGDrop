@@ -60,13 +60,14 @@ void app_main(void) {
   // On QEMU the PHY calibration NVS entries are absent. Store a dummy
   // calibration blob (via the public API) so esp_wifi_start() finds
   // valid data and skips full RF calibration (which would hang).
-  // Heap-allocate the large (1904 B) calibration struct.
   esp_chip_info_t chip;
   esp_chip_info(&chip);
   if (chip.revision == 0) {
+    ESP_LOGI(TAG, "storing dummy PHY calibration data for QEMU");
     esp_phy_calibration_data_t *cal = calloc(1, sizeof(*cal));
     if (cal) {
-      esp_phy_store_cal_data_to_nvs(cal);
+      esp_err_t sr = esp_phy_store_cal_data_to_nvs(cal);
+      ESP_LOGI(TAG, "PHY calibration store: 0x%x", sr);
       free(cal);
     }
   }
