@@ -253,14 +253,6 @@ static const char *captive_probes[] = {
     NULL,
 };
 
-static bool is_captive_probe(const char *uri) {
-  for (int i = 0; captive_probes[i]; i++) {
-    if (strncmp(uri, captive_probes[i], strlen(captive_probes[i])) == 0)
-      return true;
-  }
-  return false;
-}
-
 static esp_err_t redirect_to_portal(httpd_req_t *req) {
   httpd_resp_set_status(req, "302 Found");
   char loc[64];
@@ -280,47 +272,23 @@ static esp_err_t serve_asset(httpd_req_t *req, size_t idx) {
   return ESP_OK;
 }
 
-static esp_err_t wildcard_handler(httpd_req_t *req) {
-  const char *uri = req->uri;
+// ── Captive portal probe handlers ────────────────────────────────
 
-  if (is_captive_probe(uri))
-    return redirect_to_portal(req);
-
-  const char *lookup = uri;
-  char normalized[128];
-  if (strcmp(uri, "/") == 0) {
-    lookup = "/wwwroot/index.html";
-  } else if (uri[0] == '/') {
-    lookup = uri;
-  } else {
-    normalized[0] = '/';
-    strncpy(normalized + 1, uri, sizeof(normalized) - 2);
-    normalized[sizeof(normalized) - 1] = 0;
-    lookup = normalized;
-  }
-
-  for (size_t i = 0; i < web_assets_count; i++) {
-    if (strcmp(lookup, web_assets[i].path) == 0) {
-      return serve_asset(req, i);
-    }
-    // Also check with /wwwroot prefix (legacy embed-web paths)
-    if (lookup[0] == '/' && web_assets[i].path[0] == '/' &&
-        strncmp(web_assets[i].path, "/wwwroot", 8) == 0 &&
-        strcmp(web_assets[i].path + 8, lookup) == 0) {
-      return serve_asset(req, i);
-    }
-  }
-
-  httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not Found");
-  return ESP_FAIL;
+static esp_err_t captive_probe_handler(httpd_req_t *req) {
+  return redirect_to_portal(req);
 }
 
-// ── Catch-all: 404 error handler → serve embedded assets ─────────
-
-static esp_err_t catch_all_handler(httpd_req_t *req, httpd_err_code_t err) {
-  if (is_captive_probe(req->uri))
-    return redirect_to_portal(req);
-  return wildcard_handler(req);
+static esp_err_t asset_handler(httpd_req_t *req) {
+  const char *uri = req->uri;
+  for (size_t i = 0; i < web_assets_count; i++) {
+    if (strcmp(uri, web_assets[i].path) == 0)
+      return serve_asset(req, i);
+    if (strncmp(web_assets[i].path, "/wwwroot", 8) == 0 &&
+        strcmp(web_assets[i].path + 8, uri) == 0)
+      return serve_asset(req, i);
+  }
+  httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not Found");
+  return ESP_FAIL;
 }
 
 // ── URI registration ─────────────────────────────────────────────
@@ -335,7 +303,7 @@ static const httpd_uri_t api_uris[] = {
 
 esp_err_t web_server_start(void) {
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-  cfg.max_uri_handlers = 24;
+  cfg.max_uri_handlers = 128;
   cfg.stack_size = 8192;
   cfg.send_wait_timeout = 60;
   cfg.recv_wait_timeout = 60;
@@ -347,11 +315,32 @@ esp_err_t web_server_start(void) {
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // 404 error handler catches all unmatched URIs and serves embedded
-  // assets (or redirects captive portal probes).
-  // serve_asset explicitly sets "200 OK" to override any default 404
-  // status that the error handler machinery may have set.
-  httpd_register_err_handler(g_server, HTTPD_404_NOT_FOUND, catch_all_handler);
+  // Register every captive probe path as an explicit handler
+  for (int i = 0; captive_probes[i]; i++) {
+    httpd_uri_t probe = {.uri = captive_probes[i],
+                         .method = HTTP_GET,
+                         .handler = captive_probe_handler};
+    httpd_register_uri_handler(g_server, &probe);
+  }
+
+  // Register every asset as an explicit URI handler (up to 128 slots).
+  // The embedded paths use the /wwwroot/ prefix but the browser
+  // requests paths like /css/app.css and /_framework/foo.wasm,
+  // so we register BOTH forms (with and without the prefix).
+  // Each handler calls asset_handler() which looks up the asset by URI.
+  for (size_t i = 0; i < web_assets_count; i++) {
+    httpd_uri_t a = {.uri = web_assets[i].path,
+                     .method = HTTP_GET,
+                     .handler = asset_handler};
+    httpd_register_uri_handler(g_server, &a);
+
+    if (strncmp(web_assets[i].path, "/wwwroot", 8) == 0) {
+      httpd_uri_t b = {.uri = web_assets[i].path + 8,
+                       .method = HTTP_GET,
+                       .handler = asset_handler};
+      httpd_register_uri_handler(g_server, &b);
+    }
+  }
 
   ESP_LOGI(TAG, "HTTP server running on :80 (%u assets embedded)",
            web_assets_count);
