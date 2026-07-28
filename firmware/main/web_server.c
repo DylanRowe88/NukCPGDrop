@@ -338,11 +338,18 @@ esp_err_t web_server_start(void) {
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // Wildcard handler for all remaining GET requests (static assets).
-  // Registered AFTER API routes so they take priority.
+  // Wildcard handler for all GET requests (static assets + captive portal).
+  // Registered AFTER API routes so those take priority.
+  // Register both "/" and "/*" because "/*" does NOT match the bare "/" root.
   // Previously used a 404 error handler, but that caused ESP-IDF to send
   // default 404 headers (Content-Type: text/html) before calling the handler,
   // which made the browser reject binary .wasm files (ERR_CONNECTION_RESET).
+  const httpd_uri_t root_uri = {
+      .uri = "/",
+      .method = HTTP_GET,
+      .handler = wildcard_handler,
+  };
+  httpd_register_uri_handler(g_server, &root_uri);
   const httpd_uri_t wildcard_uri = {
       .uri = "/*",
       .method = HTTP_GET,
