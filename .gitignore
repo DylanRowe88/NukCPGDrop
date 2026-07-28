@@ -72,3 +72,5 @@ Reports/
 
 # QEMU emulator
 .qemu/
+
+node_modules/
