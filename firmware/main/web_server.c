@@ -271,6 +271,7 @@ static esp_err_t redirect_to_portal(httpd_req_t *req) {
 }
 
 static esp_err_t serve_asset(httpd_req_t *req, size_t idx) {
+  httpd_resp_set_status(req, "200 OK");
   httpd_resp_set_type(req, web_assets[idx].mime);
   if (web_assets[idx].len < web_assets[idx].raw_len)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
@@ -314,6 +315,14 @@ static esp_err_t wildcard_handler(httpd_req_t *req) {
   return ESP_FAIL;
 }
 
+// ── Catch-all: 404 error handler → serve embedded assets ─────────
+
+static esp_err_t catch_all_handler(httpd_req_t *req, httpd_err_code_t err) {
+  if (is_captive_probe(req->uri))
+    return redirect_to_portal(req);
+  return wildcard_handler(req);
+}
+
 // ── URI registration ─────────────────────────────────────────────
 
 static const httpd_uri_t api_uris[] = {
@@ -338,24 +347,11 @@ esp_err_t web_server_start(void) {
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // Wildcard handler for all GET requests (static assets + captive portal).
-  // Registered AFTER API routes so those take priority.
-  // Register both "/" and "/*" because "/*" does NOT match the bare "/" root.
-  // Previously used a 404 error handler, but that caused ESP-IDF to send
-  // default 404 headers (Content-Type: text/html) before calling the handler,
-  // which made the browser reject binary .wasm files (ERR_CONNECTION_RESET).
-  const httpd_uri_t root_uri = {
-      .uri = "/",
-      .method = HTTP_GET,
-      .handler = wildcard_handler,
-  };
-  httpd_register_uri_handler(g_server, &root_uri);
-  const httpd_uri_t wildcard_uri = {
-      .uri = "/*",
-      .method = HTTP_GET,
-      .handler = wildcard_handler,
-  };
-  httpd_register_uri_handler(g_server, &wildcard_uri);
+  // 404 error handler catches all unmatched URIs and serves embedded
+  // assets (or redirects captive portal probes).
+  // serve_asset explicitly sets "200 OK" to override any default 404
+  // status that the error handler machinery may have set.
+  httpd_register_err_handler(g_server, HTTPD_404_NOT_FOUND, catch_all_handler);
 
   ESP_LOGI(TAG, "HTTP server running on :80 (%u assets embedded)",
            web_assets_count);
