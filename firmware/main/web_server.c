@@ -311,7 +311,7 @@ static const httpd_uri_t api_uris[] = {
 
 esp_err_t web_server_start(void) {
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-  cfg.max_uri_handlers = 128;
+  cfg.max_uri_handlers = 256;
   cfg.stack_size = 8192;
   cfg.send_wait_timeout = 60;
   cfg.recv_wait_timeout = 60;

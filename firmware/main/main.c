@@ -79,7 +79,11 @@ void app_main(void) {
     ESP_LOGW(TAG, "WiFi AP not available — HTTP/DNS may not bind");
   start_mdns();
   ESP_ERROR_CHECK(dns_server_start());
-  ESP_ERROR_CHECK(web_server_start());
+  esp_err_t web_ret = web_server_start();
+  if (web_ret != ESP_OK)
+    ESP_LOGE(TAG, "Web server failed to start (0x%x)", web_ret);
+  else
+    ESP_LOGI(TAG, "Web server started OK");
 
   // LVGL init
   lv_init();
