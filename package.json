@@ -1,0 +1,32 @@
+{
+  "name": "nukcpgdrop",
+  "version": "1.0.0",
+  "description": "Timed drop rig for HomeGymCon — 6 servo-controlled N52 magnets dropping Nuks cans in random sequence, driven by ESP32-S3 with a Blazor WebAssembly captive portal UI.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e": "npx mocha tests/e2e/firmware.test.js --timeout 30000",
+    "test:e2e:real": "TARGET_URL=http://192.168.4.1 npx mocha tests/e2e/firmware.test.js --timeout 30000"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DylanRowe88/NukCPGDrop.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DylanRowe88/NukCPGDrop/issues"
+  },
+  "homepage": "https://github.com/DylanRowe88/NukCPGDrop#readme",
+  "dependencies": {
+    "@playwright/test": "^1.62.0",
+    "mocha": "^11.7.6",
+    "playwright": "^1.62.0"
+  }
+}
