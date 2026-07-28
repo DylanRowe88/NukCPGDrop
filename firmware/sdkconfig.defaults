@@ -17,3 +17,8 @@ CONFIG_COMPILER_OPTIMIZATION_DEFAULT=y
 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_ENABLE=y
 
 CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT=y
+
+# Use initial calibration data instead of full RF calibration.
+# Full calibration requires real RF hardware and hangs in QEMU.
+# The initial data from efuse is sufficient for normal operation.
+CONFIG_ESP_PHY_CALIBRATION_MODE_INIT_DATA=y

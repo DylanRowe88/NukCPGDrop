@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 #include "esp_check.h"
+#include "esp_chip_info.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
@@ -22,10 +23,35 @@ esp_err_t wifi_ap_start(void) {
 
   esp_netif_init();
   esp_event_loop_create_default();
-  esp_netif_create_default_wifi_ap();
 
+  // Try to create WiFi AP. If WiFi hardware / NVS is unavailable (e.g. in
+  // QEMU) we still let the HTTP server bind via the default network stack.
+  esp_netif_t *netif = esp_netif_create_default_wifi_ap();
+  if (!netif) {
+    ESP_LOGW(TAG, "cannot create WiFi netif — continuing without WiFi");
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  // Configure the AP IP on the netif even before WiFi init, so that the
+  // HTTP server can bind and accept connections in QEMU (where WiFi ROM
+  // is unavailable and NVS for calibration data doesn't exist).
+  esp_netif_ip_info_t ap_ip = {
+      .ip = {.addr = ESP_IP4TOADDR(192, 168, 4, 1)},
+      .gw = {.addr = ESP_IP4TOADDR(192, 168, 4, 1)},
+      .netmask = {.addr = ESP_IP4TOADDR(255, 255, 255, 0)},
+  };
+  esp_netif_set_ip_info(netif, &ap_ip);
+
+  // Disable NVS for WiFi calibration — unnecessary in QEMU and prevents
+  // the driver from failing when the NVS partition is minimal.
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "wifi init");
+  cfg.nvs_enable = false;
+  esp_err_t w_ret = esp_wifi_init(&cfg);
+  if (w_ret != ESP_OK) {
+    ESP_LOGW(TAG, "wifi init failed (0x%x) — continuing without WiFi", w_ret);
+    esp_wifi_deinit();
+    return w_ret;
+  }
   ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_AP), TAG, "set mode");
 
   wifi_config_t ap_config = {
@@ -41,8 +67,8 @@ esp_err_t wifi_ap_start(void) {
 
   ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &ap_config), TAG,
                       "set ap config");
-  ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
 
+  ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
   ESP_LOGI(TAG, "AP started: %s (192.168.4.1)", g_ssid);
   return ESP_OK;
 }

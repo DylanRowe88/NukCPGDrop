@@ -22,27 +22,30 @@ esp_err_t state_init(void) {
     ESP_RETURN_ON_ERROR(nvs_flash_erase(), TAG, "nvs erase");
     ret = nvs_flash_init();
   }
-  ESP_RETURN_ON_ERROR(ret, TAG, "nvs init");
+  if (ret != ESP_OK)
+    goto defaults;
 
   nvs_handle_t handle;
   ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
-  if (ret != ESP_OK) {
-    memset(&g_state, 0, sizeof(g_state));
-    g_state.difficulty = DIFFICULTY_SHORT;
-    return ESP_OK;
-  }
+  if (ret != ESP_OK)
+    goto defaults;
 
   size_t len = sizeof(g_state);
   ret = nvs_get_blob(handle, "state", &g_state, &len);
   if (ret != ESP_OK) {
-    memset(&g_state, 0, sizeof(g_state));
-    g_state.difficulty = DIFFICULTY_SHORT;
-    g_state.custom_interval = 2000;
-    g_state.range_min = 300;
-    g_state.range_max = 2000;
+    nvs_close(handle);
+    goto defaults;
   }
 
   nvs_close(handle);
+  return ESP_OK;
+
+defaults:
+  memset(&g_state, 0, sizeof(g_state));
+  g_state.difficulty = DIFFICULTY_SHORT;
+  g_state.custom_interval = 2000;
+  g_state.range_min = 300;
+  g_state.range_max = 2000;
   return ESP_OK;
 }
 

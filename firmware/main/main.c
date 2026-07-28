@@ -1,12 +1,16 @@
 #include "dns_server.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
+#include "esp_chip_info.h"
 #include "esp_log.h"
+#include "esp_phy_init.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led.h"
 #include "mdns.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include "pca9685.h"
 #include "servos.h"
 #include "state.h"
@@ -53,7 +57,23 @@ void app_main(void) {
 
   set_system_led();
 
-  ESP_ERROR_CHECK(wifi_ap_start());
+  // On QEMU the PHY calibration NVS entries are absent. Store a dummy
+  // calibration blob (via the public API) so esp_wifi_start() finds
+  // valid data and skips full RF calibration (which would hang).
+  // Heap-allocate the large (1904 B) calibration struct.
+  esp_chip_info_t chip;
+  esp_chip_info(&chip);
+  if (chip.revision == 0) {
+    esp_phy_calibration_data_t *cal = calloc(1, sizeof(*cal));
+    if (cal) {
+      esp_phy_store_cal_data_to_nvs(cal);
+      free(cal);
+    }
+  }
+
+  esp_err_t wifi_ret = wifi_ap_start();
+  if (wifi_ret != ESP_OK)
+    ESP_LOGW(TAG, "WiFi AP not available — HTTP/DNS may not bind");
   start_mdns();
   ESP_ERROR_CHECK(dns_server_start());
   ESP_ERROR_CHECK(web_server_start());

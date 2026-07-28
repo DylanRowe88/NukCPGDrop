@@ -66,3 +66,9 @@ coverage/
 # Mutation testing
 StrykerOutput/
 Reports/
+
+# QEMU emulator
+.qemu/
+
+# QEMU emulator
+.qemu/

@@ -280,6 +280,9 @@ static esp_err_t captive_probe_handler(httpd_req_t *req) {
 
 static esp_err_t asset_handler(httpd_req_t *req) {
   const char *uri = req->uri;
+  // The bare "/" must serve index.html (no asset path is literally "/")
+  if (strcmp(uri, "/") == 0)
+    uri = "/wwwroot/index.html";
   for (size_t i = 0; i < web_assets_count; i++) {
     if (strcmp(uri, web_assets[i].path) == 0)
       return serve_asset(req, i);

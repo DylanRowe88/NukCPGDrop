@@ -1,5 +1,6 @@
 #include "servos.h"
 #include "esp_check.h"
+#include "esp_chip_info.h"
 #include "pca9685.h"
 #include <string.h>
 
@@ -24,6 +25,14 @@ static uint16_t position_to_pulse(servo_position_t pos) {
 
 esp_err_t servos_init(void) {
   memset(g_held, true, sizeof(g_held));
+
+  // QEMU does not emulate the I2C peripheral — skip PCA9685 init.
+  esp_chip_info_t info;
+  esp_chip_info(&info);
+  if (info.revision == 0) {
+    g_pca9685_found = false;
+    return ESP_OK;
+  }
 
   pca9685_config_t cfg = {
       .addr = PCA9685_I2C_ADDR_BASE,

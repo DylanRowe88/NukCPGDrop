@@ -70,6 +70,15 @@ esp_err_t pca9685_init(pca9685_t **out, const pca9685_config_t *cfg) {
   dev->addr = cfg->addr;
   memset(dev->channel_cache, 0, sizeof(dev->channel_cache));
 
+  // Probe the I2C bus before any communication. If no device ACKs (e.g. in
+  // QEMU which lacks I2C slave emulation) we bail out quickly instead of
+  // hanging inside i2c_master_transmit when the bus never NACKs.
+  ret = i2c_master_probe(dev->bus_handle, cfg->addr, 50);
+  if (ret != ESP_OK) {
+    free(dev);
+    return ret;
+  }
+
   ret = pca9685_write_reg(dev, PCA9685_MODE1, 0x00);
   if (ret != ESP_OK) {
     free(dev);
