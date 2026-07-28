@@ -9,7 +9,7 @@ Usage:
     python flash.py --skip-e2e          # skip E2E WiFi/Playwright test
     python flash.py --monitor           # flash then open serial
 
-Port priority: CH343 (1A86:55D3) > native USB (303A:1001) > CP210x > CH340 > FTDI
+Port priority: native USB (303A:1001) > CH343 (1A86:55D3) > CP210x > CH340 > FTDI
 Requires: ESP-IDF installed, Python 3.10+, dotnet SDK 8.0+
 """
 
@@ -20,8 +20,8 @@ from typing import Optional
 REPO_ROOT = Path(__file__).resolve().parent
 
 ESP32_VID_PID = [
-    (0x1A86, 0x55D3),   # CH343 UART (common on ESP32-S3 dev boards)
-    (0x303A, 0x1001),   # ESP32-S3 native USB
+    (0x303A, 0x1001),   # ESP32-S3 USB-serial-JTAG (2.8" Display board)
+    (0x1A86, 0x55D3),   # CH343 UART (DevKitC, fallback)
     (0x10C4, 0xEA60),   # CP2102/CP2104
     (0x10C4, 0xEA70),   # CP2105
     (0x1A86, 0x7523),   # CH340
@@ -216,36 +216,112 @@ def ok(msg):
 
 # ── port detection ───────────────────────────────────────────────────
 
-def detect_port():
+from scripts.board_config import resolve, register, list_aliases
+
+ESP32_VID_PID = [
+    (0x303A, 0x1001),   # ESP32-S3 USB-serial-JTAG
+    (0x1A86, 0x55D3),   # CH343 UART
+    (0x10C4, 0xEA60),   # CP2102/CP2104
+    (0x10C4, 0xEA70),   # CP2105
+    (0x1A86, 0x7523),   # CH340
+    (0x1A86, 0x55D4),   # CH341
+    (0x0403, 0x6001),   # FT232
+    (0x0403, 0x6010),   # FT2232
+]
+
+def read_mac(port):
+    """Read the ESP32-S3 MAC address via esptool."""
     try:
-        import serial.tools.list_ports
-    except ImportError:
-        run([sys.executable, "-m", "pip", "install", "pyserial"])
-        import serial.tools.list_ports
+        r = subprocess.run(
+            [sys.executable, "-m", "esptool", "--chip", "esp32s3",
+             "--port", port, "--baud", "115200", "read_mac"],
+            capture_output=True, text=True, timeout=15
+        )
+        for line in r.stdout.splitlines():
+            m = re.search(r'MAC:\s+([0-9a-fA-F:]{17})', line)
+            if m:
+                return m.group(1).upper()
+            m = re.search(r'([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})', line)
+            if m:
+                return m.group(1).upper()
+    except Exception as e:
+        print(f"  [WARN] Could not read MAC from {port}: {e}")
+    return None
 
+def find_port_by_alias(alias):
+    """Scan all COM ports, find the one whose MAC matches the given alias.
+       Returns the port device path or None."""
+    target_mac = resolve(alias)
+    if not target_mac:
+        return None
+    
+    import serial.tools.list_ports
+    for p in serial.tools.list_ports.comports():
+        if (p.vid, p.pid) in ESP32_VID_PID:
+            mac = read_mac(p.device)
+            if mac and mac == target_mac:
+                print(f"  Found '{alias}' at {p.device}  ({p.vid:04X}:{p.pid:04X})")
+                return p.device
+    print(f"  Board '{alias}' (MAC {target_mac}) not found on any port.")
+    print(f"  Make sure it is connected and in normal boot mode.")
+    return None
+
+def identify_boards():
+    """Scan all ports and identify which board is which."""
+    import serial.tools.list_ports
+    aliases = {}
+    try:
+        from scripts.board_config import load as load_aliases
+        aliases = load_aliases()
+    except: pass
+    
     ports = list(serial.tools.list_ports.comports())
-    matches = [(p.device, p.vid, p.pid, p.description)
-               for p in ports
-               for vid, pid in ESP32_VID_PID
-               if p.vid == vid and p.pid == pid]
+    print("Scanning for ESP32-S3 boards...")
+    for p in ports:
+        if (p.vid, p.pid) in ESP32_VID_PID:
+            mac = read_mac(p.device)
+            known = [a for a, m in aliases.items() if m == mac] if mac else []
+            label = f"  [{known[0]}]" if known else ""
+            print(f"  {p.device:8s}  ({p.vid:04X}:{p.pid:04X})  MAC={mac or '???'}  {label}")
+    print()
+    list_aliases()
+    print()
+    print("To register a new board:")
+    print("  python flash.py --register-alias MyBoard")
+    print("  (probes all ports and prompts to confirm which one)")
 
-    if not matches:
-        print("  No ESP32-S3 detected. Available ports:")
-        for p in ports:
-            vp = f"{p.vid:04X}:{p.pid:04X}" if p.vid else "N/A"
-            print(f"    {p.device}  [{vp}]  {p.description}")
-        fail("Specify port manually:  python flash.py --port COM3")
+def confirm_and_flash(port, alias):
+    """Confirm with the user before flashing, then flash."""
+    mac = read_mac(port)
+    print(f"  Target: '{alias}' at {port} (MAC: {mac})")
+    
+    # Build and flash
+    if not args.no_build:
+        if not args.skip_lint: run_lint(); step_end("lint")
+        run_ui_tests(); step_end("tests")
+        build_ui(); step_end("ui")
+        embed_web(); step_end("embed")
+        build_firmware(); step_end("firmware")
+        test_firmware(); step_end("qemu")
+    else:
+        print("  (build skipped)")
 
-    def sort_key(m):
-        vid, pid = m[1], m[2]
-        if (vid, pid) == (0x1A86, 0x55D3): return 0
-        if (vid, pid) == (0x303A, 0x1001): return 1
-        return 2
-    matches.sort(key=sort_key)
+    flash_firmware(port); step_end("flash")
+    time.sleep(1)
+    verify_flash(port); step_end("verify")
+    time.sleep(1)
+    
+    is_native = port_vid(port) == 0x303A
+    if not is_native:
+        hard_reset_uart(port)
+        time.sleep(0.3)
+    check_boot(port); step_end("boot")
 
-    port, vid, pid, desc = matches[0]
-    print(f"  Detected: {port}  ({vid:04X}:{pid:04X} — {desc})")
-    return port
+    if not args.skip_e2e:
+        connect_and_test_e2e()
+
+    if args.monitor:
+        idf_run(["-p", port, "monitor"], cwd=FIRMWARE_DIR)
 
 
 def port_vid(port):
@@ -314,10 +390,10 @@ def flash_firmware(port):
     if not bin_path.exists():
         fail(f"{bin_path} not found — run build first")
 
-    # Always use esptool directly for full control over reset behavior.
-    # UART ports need --after no_reset + manual RTS/DTR hard reset.
     is_native = port_vid(port) == 0x303A
+    is_8mb = not is_native  # CH343 UART → DevKitC (8MB)
     baud = 921600 if is_native else 460800
+    flash_size = "8MB" if is_8mb else "16MB"
 
     esptool_args = [
         _IDF_PYTHON, "-m", "esptool",
@@ -329,7 +405,7 @@ def flash_firmware(port):
         "write_flash",
         "--flash_mode", "dio",
         "--flash_freq", "80m",
-        "--flash_size", "8MB",
+        "--flash_size", flash_size,
         "0x0", str(FIRMWARE_DIR / "build" / "bootloader" / "bootloader.bin"),
         "0x10000", str(bin_path),
         "0x8000", str(FIRMWARE_DIR / "build" / "partition_table" / "partition-table.bin"),
@@ -551,12 +627,48 @@ def connect_and_test_e2e():
 def main():
     parser = argparse.ArgumentParser(description="NukCPGDrop — build, flash, verify, E2E")
     parser.add_argument("--port", "-p", help="Serial port (auto-detect)")
+    parser.add_argument("--board", default=None, metavar="ALIAS",
+                        help="Board alias (e.g. DisplayBoard, E2EBoard). "
+                             "Required for flash. Use --identify to list aliases.")
+    parser.add_argument("--register-alias", metavar="ALIAS",
+                        help="Register a new board alias by probing all ports")
     parser.add_argument("--no-build", action="store_true", help="Skip build, flash existing")
     parser.add_argument("--skip-e2e", action="store_true", help="Skip WiFi/Playwright E2E test")
     parser.add_argument("--monitor", "-m", action="store_true", help="Open serial after flash")
     parser.add_argument("--skip-lint", action="store_true", help="Skip linting")
     parser.add_argument("--skip-tests", action="store_true", help="Skip tests")
+    parser.add_argument("--identify", action="store_true", help="Identify connected boards")
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
+    global args
     args = parser.parse_args()
+
+    if args.identify:
+        identify_boards()
+        return
+
+    if args.register_alias:
+        import serial.tools.list_ports
+        ports = [(p.device, p.vid, p.pid) for p in serial.tools.list_ports.comports()
+                 if (p.vid, p.pid) in ESP32_VID_PID]
+        if not ports:
+            fail("No ESP32-S3 boards found to register")
+        for dev, vid, pid in ports:
+            mac = read_mac(dev)
+            label = "USB-JTAG" if (vid, pid) == (0x303A, 0x1001) else "UART"
+            print(f"  {dev:8s}  ({vid:04X}:{pid:04X})  {label}  MAC={mac}")
+        idx = 0 if len(ports) == 1 else int(input("  Which port index (0)? ") or "0")
+        dev, vid, pid = ports[idx]
+        mac = read_mac(dev)
+        if mac:
+            register(args.register_alias, mac)
+        else:
+            fail(f"Could not read MAC from {dev}")
+        return
+
+    if not args.board:
+        parser.print_help()
+        print("\nERROR: --board ALIAS is required (use --identify to list available boards)")
+        sys.exit(1)
 
     os.chdir(REPO_ROOT)
     print(f"NukCPGDrop — {REPO_ROOT}\n")
@@ -564,9 +676,14 @@ def main():
     if not _IDF_PATH:
         fail("ESP-IDF not found. Install it and set IDF_PATH.")
 
+    # Find the board by alias (MAC-based)
+    port = args.port or find_port_by_alias(args.board)
+    if not port:
+        fail(f"Board '{args.board}' not found. Run --identify to list connected boards.")
+
+    # Build and flash
     if not args.no_build:
-        if not args.skip_lint:
-            run_lint(); step_end("lint")
+        if not args.skip_lint: run_lint(); step_end("lint")
         run_ui_tests(); step_end("tests")
         build_ui(); step_end("ui")
         embed_web(); step_end("embed")
@@ -575,12 +692,13 @@ def main():
     else:
         print("  (build skipped)")
 
-    port = args.port or detect_port()
     flash_firmware(port); step_end("flash")
     time.sleep(1)
     verify_flash(port); step_end("verify")
     time.sleep(1)
-    if port_vid(port) != 0x303A:
+
+    is_native = port_vid(port) == 0x303A
+    if not is_native:
         hard_reset_uart(port)
         time.sleep(0.3)
     check_boot(port); step_end("boot")

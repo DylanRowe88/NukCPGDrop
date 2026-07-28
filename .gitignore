@@ -1,9 +1,15 @@
 # ESP-IDF
 firmware/build/
+firmware/build_devkitc/
+firmware/build_*/
 firmware/sdkconfig
 firmware/sdkconfig.old
 firmware/dependencies.lock
 firmware/managed_components/
+
+# Third-party ESP-IDF components (full library copies)
+firmware/components/lvgl/
+firmware/components/lvgl_esp32_drivers/
 
 # .NET
 ui/**/bin/

@@ -1,0 +1,30 @@
+menu "Board Configuration"
+
+choice BOARD_SELECTION
+    prompt "Target board"
+    default BOARD_DISPLAY
+
+config BOARD_DISPLAY
+    bool "2.8inch ESP32-S3 Display (N16R8)"
+
+config BOARD_DEVKITC
+    bool "ESP32-S3-DevKitC (N8R2)"
+
+endchoice
+
+config I2C_SDA_GPIO
+    int
+    default 16 if BOARD_DISPLAY
+    default 8  if BOARD_DEVKITC
+
+config I2C_SCL_GPIO
+    int
+    default 15 if BOARD_DISPLAY
+    default 9  if BOARD_DEVKITC
+
+config LED_GPIO
+    int
+    default 42 if BOARD_DISPLAY
+    default 48 if BOARD_DEVKITC
+
+endmenu

@@ -9,8 +9,10 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:e2e": "npx mocha tests/e2e/firmware.test.js --timeout 30000",
-    "test:e2e:real": "TARGET_URL=http://192.168.4.1 npx mocha tests/e2e/firmware.test.js --timeout 30000"
+    "test:e2e": "set BOARD_TYPE=qemu&& npx mocha tests/e2e/firmware.test.js --timeout 60000",
+    "test:e2e:e2eboard": "set BOARD_TYPE=E2EBoard&& npx mocha tests/e2e/firmware.test.js --timeout 120000",
+    "test:e2e:display": "set BOARD_TYPE=DisplayBoard&& npx mocha tests/e2e/firmware.test.js --timeout 120000",
+    "test:e2e:all": "npm run test:e2e && npm run test:e2e:e2eboard && npm run test:e2e:display"
   },
   "repository": {
     "type": "git",

@@ -1,4 +1,5 @@
 #include "pca9685.h"
+#include "i2c_bus.h"
 #include "driver/i2c_master.h"
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
@@ -40,19 +41,10 @@ esp_err_t pca9685_init(pca9685_t **out, const pca9685_config_t *cfg) {
   if (!dev)
     return ESP_ERR_NO_MEM;
 
-  i2c_master_bus_config_t bus_cfg = {
-      .i2c_port = I2C_NUM_0,
-      .sda_io_num = cfg->sda_gpio,
-      .scl_io_num = cfg->scl_gpio,
-      .clk_source = I2C_CLK_SRC_DEFAULT,
-      .glitch_ignore_cnt = 7,
-      .flags.enable_internal_pullup = true,
-  };
-
-  ret = i2c_new_master_bus(&bus_cfg, &dev->bus_handle);
-  if (ret != ESP_OK) {
+  dev->bus_handle = i2c_bus_init(cfg->sda_gpio, cfg->scl_gpio, cfg->clk_speed);
+  if (!dev->bus_handle) {
     free(dev);
-    return ret;
+    return ESP_FAIL;
   }
 
   i2c_device_config_t dev_cfg = {

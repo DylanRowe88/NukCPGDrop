@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        dashboard.c
+        screen_main.c
+    INCLUDE_DIRS
+        include
+    REQUIRES
+        lvgl
+        lvgl_esp32_drivers
+        lvgl_porting
+        main
+)

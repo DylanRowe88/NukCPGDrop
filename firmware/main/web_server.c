@@ -114,6 +114,11 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddStringToObject(wifi, "version", "NukCPGDrop v1.0");
   cJSON_AddItemToObject(root, "wifi", wifi);
 
+  cJSON *battery = cJSON_CreateObject();
+  cJSON_AddNumberToObject(battery, "millivolts", g_state.battery_millivolts);
+  cJSON_AddNumberToObject(battery, "percent", g_state.battery_percent);
+  cJSON_AddItemToObject(root, "battery", battery);
+
   const char *json = cJSON_Print(root);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, json);

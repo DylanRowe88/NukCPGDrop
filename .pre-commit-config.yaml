@@ -76,8 +76,8 @@ repos:
             if ($LASTEXITCODE -ne 0) { exit 1 };
             Pop-Location
 
-      - id: e2e-test
-        name: E2E test (QEMU + Playwright)
+      - id: e2e-test-qemu
+        name: E2E QEMU test (Playwright)
         language: system
         pass_filenames: false
         always_run: false
@@ -92,7 +92,29 @@ repos:
               Write-Host "[skip] npx not found"; exit 0 };
             npx mocha tests/e2e/firmware.test.js --timeout 60000 2>&1;
             if ($LASTEXITCODE -ne 0) {
-              Write-Host "[warn] E2E test failed — pass with --no-verify to skip";
+              Write-Host "[warn] QEMU E2E test failed — pass with --no-verify to skip";
+              exit 0 }
+
+      - id: e2e-test-hardware
+        name: E2E hardware test (when board connected)
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-push]
+        entry: powershell
+        args:
+          - -Command
+          - >
+            $board = $env:BOARD_TYPE;
+            if (-not $board -or $board -eq 'qemu') {
+              Write-Host "[skip] BOARD_TYPE not set (E2EBoard or DisplayBoard)"; exit 0 };
+            if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
+              Write-Host "[skip] npx not found"; exit 0 };
+            $env:TARGET_URL = 'http://192.168.4.1';
+            Write-Host "Running E2E tests for board $board at $env:TARGET_URL";
+            npx mocha tests/e2e/firmware.test.js --timeout 120000 2>&1;
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[warn] Hardware E2E test failed — pass with --no-verify to skip";
               exit 0 }
 
       # Stryker mutation testing is in CI only (.github/workflows/ci.yml)

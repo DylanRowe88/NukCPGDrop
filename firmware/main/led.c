@@ -1,10 +1,9 @@
 #include "led.h"
-#include "esp_chip_info.h"
 #include "esp_log.h"
 #include "led_strip.h"
 #include <stdlib.h>
 
-#define LED_GPIO 48
+#define LED_GPIO CONFIG_LED_GPIO
 #define LED_STRIP_LEN 1
 
 static const char *TAG = "led";
@@ -18,22 +17,7 @@ const led_color_t LED_BLUE = {0, 0, 255};
 const led_color_t LED_YELLOW = {255, 255, 0};
 const led_color_t LED_WHITE = {255, 255, 255};
 
-static bool is_qemu(void) {
-  esp_chip_info_t info;
-  esp_chip_info(&info);
-  // QEMU reports chip revision 0; real ESP32-S3 starts at rev 0.1+
-  return info.revision == 0;
-}
-
 esp_err_t led_init(void) {
-  // The RMT peripheral is not emulated in QEMU — attempting to
-  // initialise it would hang the CPU. Skip the LED entirely when
-  // running under emulation.
-  if (is_qemu()) {
-    ESP_LOGW(TAG, "QEMU detected — skipping RGB LED init");
-    return ESP_OK;
-  }
-
   led_strip_config_t cfg = {
       .strip_gpio_num = LED_GPIO,
       .max_leds = LED_STRIP_LEN,

@@ -25,6 +25,8 @@ typedef struct {
   uint32_t custom_interval;
   uint32_t range_min;
   uint32_t range_max;
+  int battery_millivolts;
+  int battery_percent;
 } nukcpgdrop_state_t;
 
 extern nukcpgdrop_state_t g_state;
@@ -38,6 +40,10 @@ void state_increment_drop_count(void);
 void state_save_sequence(const uint8_t *order, uint8_t completed);
 
 uint32_t state_get_drop_interval_ms(difficulty_t diff);
+
+void battery_init(void);
+int battery_read_mv(void);
+int battery_pct(int mv);
 
 #ifdef __cplusplus
 }

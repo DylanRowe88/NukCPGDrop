@@ -1,16 +1,18 @@
+#include "audio.h"
+#include "dashboard.h"
 #include "dns_server.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "esp_check.h"
-#include "esp_chip_info.h"
 #include "esp_log.h"
-#include "esp_phy_init.h"
-#include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led.h"
+#include "lv_port_disp.h"
+#include "lv_port_indev.h"
+#include "lvgl.h"
 #include "mdns.h"
-#include "nvs.h"
-#include "nvs_flash.h"
 #include "pca9685.h"
 #include "servos.h"
 #include "state.h"
@@ -20,6 +22,9 @@
 
 static const char *TAG = "nukcpgdrop";
 bool g_pca9685_present = false;
+
+static void lvgl_tick_cb(void *arg);
+static void lvgl_task(void *arg);
 
 static void set_system_led(void) {
   if (g_pca9685_present) {
@@ -35,6 +40,11 @@ static void start_mdns(void) {
   mdns_instance_name_set("NukCPGDrop Rig");
   mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
   ESP_LOGI(TAG, "mDNS: nukcpgdrop.local");
+}
+
+static void battery_update_timer(void *arg) {
+  g_state.battery_millivolts = battery_read_mv();
+  g_state.battery_percent = battery_pct(g_state.battery_millivolts);
 }
 
 void app_main(void) {
@@ -57,20 +67,12 @@ void app_main(void) {
 
   set_system_led();
 
-  // On QEMU the PHY calibration NVS entries are absent. Store a dummy
-  // calibration blob (via the public API) so esp_wifi_start() finds
-  // valid data and skips full RF calibration (which would hang).
-  esp_chip_info_t chip;
-  esp_chip_info(&chip);
-  if (chip.revision == 0) {
-    ESP_LOGI(TAG, "storing dummy PHY calibration data for QEMU");
-    esp_phy_calibration_data_t *cal = calloc(1, sizeof(*cal));
-    if (cal) {
-      esp_err_t sr = esp_phy_store_cal_data_to_nvs(cal);
-      ESP_LOGI(TAG, "PHY calibration store: 0x%x", sr);
-      free(cal);
-    }
-  }
+  battery_init();
+  static esp_timer_handle_t batt_handle;
+  esp_timer_create_args_t batt_timer = {.callback = &battery_update_timer,
+                                        .name = "battery"};
+  esp_timer_create(&batt_timer, &batt_handle);
+  esp_timer_start_periodic(batt_handle, 10000000);
 
   esp_err_t wifi_ret = wifi_ap_start();
   if (wifi_ret != ESP_OK)
@@ -79,7 +81,55 @@ void app_main(void) {
   ESP_ERROR_CHECK(dns_server_start());
   ESP_ERROR_CHECK(web_server_start());
 
+  // LVGL init
+  lv_init();
+  lv_port_disp_init();
+  lv_port_indev_init();
+  dashboard_init();
+
+  // Backlight PWM on GPIO45
+  ledc_timer_config_t bl_timer = {
+      .speed_mode = LEDC_LOW_SPEED_MODE,
+      .timer_num = LEDC_TIMER_0,
+      .duty_resolution = LEDC_TIMER_8_BIT,
+      .freq_hz = 2000,
+  };
+  ledc_timer_config(&bl_timer);
+  ledc_channel_config_t bl_chan = {
+      .gpio_num = 45,
+      .speed_mode = LEDC_LOW_SPEED_MODE,
+      .channel = LEDC_CHANNEL_0,
+      .timer_sel = LEDC_TIMER_0,
+      .duty = 255,
+      .hpoint = 0,
+  };
+  ledc_channel_config(&bl_chan);
+
+  gpio_set_direction(1, GPIO_MODE_OUTPUT);
+  gpio_set_level(1, 1); // Enable amp
+  audio_init();
+  i2s_audio_init();
+
+  // LVGL tick timer (5ms)
+  const esp_timer_create_args_t lvgl_tick_timer = {.callback = &lvgl_tick_cb,
+                                                   .name = "lvgl_tick"};
+  esp_timer_handle_t lvgl_tick_handle;
+  esp_timer_create(&lvgl_tick_timer, &lvgl_tick_handle);
+  esp_timer_start_periodic(lvgl_tick_handle, 5000);
+
+  // LVGL task on core 0
+  xTaskCreatePinnedToCore(lvgl_task, "lvgl", 4096, NULL, 5, NULL, 0);
+
   ESP_LOGI(TAG, "Ready. SSID: %s  IP: %s", wifi_ap_get_ssid(),
            wifi_ap_get_ip());
   ESP_LOGI(TAG, "Open http://nukcpgdrop.local or http://192.168.4.1");
+}
+
+static void lvgl_tick_cb(void *arg) { lv_tick_inc(5); }
+
+static void lvgl_task(void *arg) {
+  while (1) {
+    lv_task_handler();
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
 }

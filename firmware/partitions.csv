@@ -1,7 +1,6 @@
-# ESP-IDF Partition Table
+# ESP-IDF Partition Table for 16 MB flash (2.8" Display board)
 # Name,   Type, SubType,  Offset,   Size,     Flags
 nvs,      data, nvs,      0x9000,   0x4000,
 otadata,  data, ota,      0xd000,   0x2000,
 phy,      data, phy,      0xf000,   0x1000,
-factory,  app,  factory,  0x10000,  6M,
-web,      data, spiffs,   0x610000, 1850K,
+factory,  app,  factory,  0x10000,  14M,

@@ -1,4 +1,6 @@
 #include "state.h"
+#include "driver/adc.h"
+#include "esp_adc_cal.h"
 #include "esp_check.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -99,4 +101,28 @@ uint32_t state_get_drop_interval_ms(difficulty_t diff) {
   if (g_state.custom_interval > 0)
     return g_state.custom_interval;
   return interval_map[diff];
+}
+
+#define BATTERY_ADC_CHANNEL ADC1_CHANNEL_8
+
+void battery_init(void) {
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(BATTERY_ADC_CHANNEL, ADC_ATTEN_DB_12);
+}
+
+int battery_read_mv(void) {
+  int raw = adc1_get_raw(BATTERY_ADC_CHANNEL);
+  esp_adc_cal_characteristics_t chars;
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12, ADC_WIDTH_BIT_12, 0,
+                           &chars);
+  uint32_t voltage = esp_adc_cal_raw_to_voltage(raw, &chars);
+  return (int)(voltage * 2);
+}
+
+int battery_pct(int mv) {
+  if (mv <= 2500)
+    return 0;
+  if (mv >= 4200)
+    return 100;
+  return (mv - 2500) * 100 / (4200 - 2500);
 }

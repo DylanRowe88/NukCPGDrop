@@ -11,7 +11,10 @@ idf_component_register(
     INCLUDE_DIRS
         include
     REQUIRES
+        audio
         driver
+        esp_adc
+        esp_timer
         json
         mdns
         nvs_flash
@@ -19,4 +22,9 @@ idf_component_register(
         esp_netif
         lwip
         esp_http_server
+        lvgl
+        lvgl_esp32_drivers
+        lvgl_porting
+        dashboard_ui
+        i2c_shared
 )
