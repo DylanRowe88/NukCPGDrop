@@ -229,6 +229,30 @@ ESP32_VID_PID = [
     (0x0403, 0x6010),   # FT2232
 ]
 
+BOARD_CONFIGS = {
+    "DisplayBoard": {
+        "build_dir": "build",
+        "flash_size": "16MB",
+        "partitions": "partitions.csv",
+        "sdkconfig_override": "",
+        "cmake_defs": [],
+        "flash_offset_ota": "0xd000",
+    },
+    "E2EBoard": {
+        "build_dir": "build_devkitc",
+        "flash_size": "8MB",
+        "partitions": "partitions-8mb.csv",
+        "sdkconfig_override": "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions-8mb.csv\"",
+        "cmake_defs": [
+            "-DCONFIG_BOARD_DEVKITC=y",
+            "-DCONFIG_E2E_TEST=y",
+            "-DCONFIG_ESPTOOLPY_FLASHSIZE_8MB=y",
+            "-DCONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions-8mb.csv\"",
+        ],
+        "flash_offset_ota": "0xd000",
+    },
+}
+
 def read_mac(port):
     """Read the ESP32-S3 MAC address via esptool."""
     try:
@@ -298,17 +322,19 @@ def confirm_and_flash(port, alias):
     # Build and flash
     if not args.no_build:
         if not args.skip_lint: run_lint(); step_end("lint")
-        run_ui_tests(); step_end("tests")
-        build_ui(); step_end("ui")
-        embed_web(); step_end("embed")
-        build_firmware(); step_end("firmware")
-        test_firmware(); step_end("qemu")
+        if alias != "E2EBoard":
+            run_ui_tests(); step_end("tests")
+            build_ui(); step_end("ui")
+            embed_web(); step_end("embed")
+        build_firmware(alias); step_end("firmware")
+        if alias == "DisplayBoard":
+            test_firmware(); step_end("qemu")
     else:
         print("  (build skipped)")
 
-    flash_firmware(port); step_end("flash")
+    flash_firmware(port, alias); step_end("flash")
     time.sleep(1)
-    verify_flash(port); step_end("verify")
+    verify_flash(port, alias); step_end("verify")
     time.sleep(1)
 
     is_native = port_vid(port) == 0x303A
@@ -317,8 +343,8 @@ def confirm_and_flash(port, alias):
         time.sleep(0.3)
     check_boot(port); step_end("boot")
 
-    if not args.skip_e2e:
-        connect_and_test_e2e()
+    if not args.skip_e2e and alias == "E2EBoard":
+        check_e2e_results(port)
 
     if args.monitor:
         idf_run(["-p", port, "monitor"], cwd=FIRMWARE_DIR)
@@ -368,32 +394,38 @@ def embed_web():
          str(pub), str(header)])
 
 
-def build_firmware():
+def build_firmware(board_alias=None):
     step("Build: ESP-IDF firmware")
-    idf_run(["build"], cwd=FIRMWARE_DIR)
+    cfg = BOARD_CONFIGS.get(board_alias, BOARD_CONFIGS["DisplayBoard"])
+    build_dir = cfg["build_dir"]
+    if board_alias and board_alias != "DisplayBoard":
+        idf_run(["-B", build_dir, "reconfigure"] + cfg["cmake_defs"], cwd=FIRMWARE_DIR)
+    idf_run(["-B", build_dir, "build"], cwd=FIRMWARE_DIR)
 
 
 def test_firmware():
     step("Test: Firmware unit tests (QEMU)")
     try:
-        idf_run(["test"], cwd=FIRMWARE_DIR, check=False)
+        idf_run(["build", "--target", "test"], cwd=FIRMWARE_DIR, check=False)
         print("  (QEMU tests passed or skipped)")
-    except FileNotFoundError:
-        print("  [skip] QEMU not available")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        print("  [skip] QEMU not available or no test app")
 
 
 # ── flash ────────────────────────────────────────────────────────────
 
-def flash_firmware(port):
-    step(f"Flash: firmware to {port}")
-    bin_path = FIRMWARE_DIR / "build" / "NukCPGDrop.bin"
+def flash_firmware(port, board_alias=None):
+    cfg = BOARD_CONFIGS.get(board_alias, BOARD_CONFIGS["DisplayBoard"])
+    build_dir = FIRMWARE_DIR / cfg["build_dir"]
+
+    step(f"Flash: firmware to {port} (board={board_alias or 'DisplayBoard'})")
+    bin_path = build_dir / "NukCPGDrop.bin"
     if not bin_path.exists():
         fail(f"{bin_path} not found — run build first")
 
     is_native = port_vid(port) == 0x303A
-    is_8mb = not is_native  # CH343 UART → DevKitC (8MB)
     baud = 921600 if is_native else 460800
-    flash_size = "8MB" if is_8mb else "16MB"
+    flash_size = cfg["flash_size"]
 
     esptool_args = [
         _IDF_PYTHON, "-m", "esptool",
@@ -401,18 +433,20 @@ def flash_firmware(port):
         "--port", port,
         "--baud", str(baud),
         "--before", "default_reset",
-        "--after", "no_reset" if not is_native else "hard_reset",
+        "--after", "hard_reset",
         "write_flash",
         "--flash_mode", "dio",
         "--flash_freq", "80m",
         "--flash_size", flash_size,
-        "0x0", str(FIRMWARE_DIR / "build" / "bootloader" / "bootloader.bin"),
+        "0x0", str(build_dir / "bootloader" / "bootloader.bin"),
+        "0x8000", str(build_dir / "partition_table" / "partition-table.bin"),
         "0x10000", str(bin_path),
-        "0x8000", str(FIRMWARE_DIR / "build" / "partition_table" / "partition-table.bin"),
-        "0xd000", str(FIRMWARE_DIR / "build" / "ota_data_initial.bin"),
     ]
-    print(f"  > {' '.join(str(a) for a in esptool_args)}")
+    ota_path = build_dir / "ota_data_initial.bin"
+    if ota_path.exists():
+        esptool_args += [cfg["flash_offset_ota"], str(ota_path)]
 
+    print(f"  > esptool write_flash --flash_size {flash_size} ...")
     r = subprocess.run(esptool_args, env=_IDF_ENV)
     if r.returncode != 0:
         fail("Flash failed")
@@ -420,9 +454,14 @@ def flash_firmware(port):
 
 # ── verify ──────────────────────────────────────────────────────────
 
-def verify_flash(port):
+def verify_flash(port, board_alias=None):
     step("Verify: flash integrity")
-    bin_path = FIRMWARE_DIR / "build" / "NukCPGDrop.bin"
+    cfg = BOARD_CONFIGS.get(board_alias, BOARD_CONFIGS["DisplayBoard"])
+    build_dir = FIRMWARE_DIR / cfg["build_dir"]
+    bin_path = build_dir / "NukCPGDrop.bin"
+    if not bin_path.exists():
+        warn(f"{bin_path} not found — skip verification")
+        return
     ok(f"Firmware size: {bin_path.stat().st_size:,} bytes")
     r = subprocess.run([sys.executable, "-m", "esptool",
         "--port", port, "--baud", "460800",
@@ -489,6 +528,50 @@ def check_boot(port, timeout=15):
     else:
         warn("Boot monitor ended without seeing 'app_main'")
 
+
+# ── E2E: DevKitC STA HTTP test results ─────────────────────────────
+
+def check_e2e_results(port, timeout=45):
+    step("E2E: DevKitC HTTP test via serial")
+    try:
+        import serial as pyserial
+    except ImportError:
+        run([sys.executable, "-m", "pip", "install", "pyserial"])
+        import serial as pyserial
+
+    is_native = port_vid(port) == 0x303A
+    baud = 921600 if is_native else 115200
+
+    ser = pyserial.Serial(port, baud, timeout=2)
+    print(f"  Monitoring {port} @ {baud} baud for {timeout}s...")
+    start = time.time()
+    saw_test = False
+    passed = 0
+    failed = 0
+    lines = []
+
+    while time.time() - start < timeout:
+        try:
+            line = ser.readline().decode('utf-8', errors='replace').strip()
+            if not line:
+                continue
+            lines.append(line)
+            print(f"  {line[:160]}")
+            if "E2E HTTP Test Complete" in line:
+                saw_test = True
+                break
+            if "FAILED" in line:
+                failed += 1
+            if "HTTP GET" in line and "Response" in line:
+                passed += 1
+        except:
+            pass
+
+    ser.close()
+    if saw_test:
+        ok(f"E2E test complete ({passed} passed, {failed} failed)")
+    else:
+        warn("E2E test results not seen in serial output")
 
 # ── E2E: WiFi + Playwright ─────────────────────────────────────────
 

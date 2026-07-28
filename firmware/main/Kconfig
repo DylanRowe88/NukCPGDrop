@@ -28,3 +28,12 @@ config LED_GPIO
     default 48 if BOARD_DEVKITC
 
 endmenu
+
+menu "Test Configuration"
+
+config E2E_TEST
+    bool "Enable E2E test mode (WiFi STA + HTTP client)"
+    default n
+    depends on BOARD_DEVKITC
+
+endmenu

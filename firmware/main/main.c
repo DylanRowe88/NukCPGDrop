@@ -50,7 +50,14 @@ static void battery_update_timer(void *arg) {
 void app_main(void) {
   ESP_LOGI(TAG, "NukCPGDrop starting...");
 
-  // Init RGB LED first for boot feedback
+#if defined(CONFIG_E2E_TEST) && CONFIG_E2E_TEST
+  ESP_LOGI(TAG, "E2E test mode — connecting to DisplayBoard AP and testing HTTP");
+  wifi_sta_http_test("NukCPGDrop-D233BC");
+  ESP_LOGI(TAG, "E2E test complete — idle");
+  vTaskSuspend(NULL);
+  return;
+#endif
+
   led_init();
 
   ESP_ERROR_CHECK(state_init());

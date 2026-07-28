@@ -13,6 +13,11 @@ const char *wifi_ap_get_ip(void);
 int wifi_ap_get_sta_count(void);
 int wifi_ap_get_rssi(void);
 
+#if defined(CONFIG_E2E_TEST) && CONFIG_E2E_TEST
+esp_err_t wifi_sta_connect(const char *ssid);
+void wifi_sta_http_test(const char *target_ssid);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

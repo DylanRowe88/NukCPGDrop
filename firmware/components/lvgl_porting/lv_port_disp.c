@@ -40,10 +40,9 @@ static void ili9341_init(void) {
   ili9341_send_cmd(0x11);
   vTaskDelay(pdMS_TO_TICKS(120)); // Sleep out
   ili9341_send_cmd(0x36);
-  ili9341_send_data_byte(0x48); // MADCTL: BGR
+  ili9341_send_data_byte(0x40); // MADCTL: RGB, MY=1 (portrait flip)
   ili9341_send_cmd(0x3A);
   ili9341_send_data_byte(0x55); // COLMOD: 16-bit
-  ili9341_send_cmd(0x21);       // Display inversion ON (fixes inverted colors)
   ili9341_send_cmd(0x29);       // Display ON
   ESP_LOGI(TAG, "ILI9341 initialized");
 }
