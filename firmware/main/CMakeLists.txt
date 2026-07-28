@@ -23,8 +23,8 @@ idf_component_register(
         lwip
         esp_http_server
         lvgl
-        lvgl_esp32_drivers
-        lvgl_porting
+        
+        
         dashboard_ui
         i2c_shared
 )

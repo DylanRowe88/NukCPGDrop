@@ -1,5 +1,8 @@
 dependencies:
   espressif/mdns:
-    version: "^1.0.0"
+    version: ^1.0.0
   espressif/led_strip:
-    version: "^2.4.0"
+    version: ^2.4.0
+  lvgl/lvgl: ^8.3.6
+  espressif/esp_lvgl_port: ^1.0.0
+  espressif/esp_lcd_touch_ft5x06: '*'

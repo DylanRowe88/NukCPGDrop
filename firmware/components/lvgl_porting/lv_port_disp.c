@@ -1,212 +1,104 @@
-/**
- * @file lv_port_disp_templ.c
- *
- */
+#include "esp_err.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_vendor.h"
+#include "esp_log.h"
+#include "esp_lvgl_port.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "lvgl.h"
+#include "driver/spi_master.h"
 
-/*Copy this file as "lv_port_disp.c" and set this value to "1" to enable
- * content*/
-#if 1
+static const char *TAG = "lvgl_port";
 
-/*********************
- *      INCLUDES
- *********************/
-#include "lv_port_disp.h"
-#include "disp_driver.h"
-#include "lvgl_helpers.h"
-#include <stdbool.h>
-
-/*********************
- *      DEFINES
- *********************/
-#define MY_DISP_HOR_RES 240
-#define MY_DISP_VER_RES 320
-
-/**********************
- *      TYPEDEFS
- **********************/
-
-/**********************
- *  STATIC PROTOTYPES
- **********************/
-static void disp_init(void);
-
-static void disp_flush(lv_disp_drv_t *disp_drv, const lv_area_t *area,
-                       lv_color_t *color_p);
-// static void gpu_fill(lv_disp_drv_t * disp_drv, lv_color_t * dest_buf,
-// lv_coord_t dest_width,
-//         const lv_area_t * fill_area, lv_color_t color);
-
-/**********************
- *  STATIC VARIABLES
- **********************/
-
-/**********************
- *      MACROS
- **********************/
-
-/**********************
- *   GLOBAL FUNCTIONS
- **********************/
+static lv_disp_t *display_handle;
 
 void lv_port_disp_init(void) {
-  /*-------------------------
-   * Initialize your display
-   * -----------------------*/
-  disp_init();
+  // SPI bus config
+  spi_bus_config_t bus = {
+      .mosi_io_num = 11,
+      .miso_io_num = 13,
+      .sclk_io_num = 12,
+      .quadwp_io_num = -1,
+      .quadhd_io_num = -1,
+      .max_transfer_sz = 320 * 40 * sizeof(lv_color_t),
+  };
+  ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO));
 
-  /*-----------------------------
-   * Create a buffer for drawing
-   *----------------------------*/
+  // LCD panel IO config (SPI)
+  esp_lcd_panel_io_spi_config_t io_cfg = {
+      .cs_gpio_num = 10,
+      .dc_gpio_num = 46,
+      .spi_mode = 0,
+      .pclk_hz = 40 * 1000 * 1000,
+      .trans_queue_depth = 10,
+      .lcd_cmd_bits = 8,
+      .lcd_param_bits = 8,
+  };
+  esp_lcd_panel_io_handle_t io_handle;
+  ESP_ERROR_CHECK(
+      esp_lcd_new_panel_io_spi(SPI2_HOST, &io_cfg, &io_handle));
 
-  /**
-   * LVGL requires a buffer where it internally draws the widgets.
-   * Later this buffer will passed to your display driver's `flush_cb` to copy
-   * its content to your display. The buffer has to be greater than 1 display
-   * row
-   *
-   * There are 3 buffering configurations:
-   * 1. Create ONE buffer:
-   *      LVGL will draw the display's content here and writes it to your
-   * display
-   *
-   * 2. Create TWO buffer:
-   *      LVGL will draw the display's content to a buffer and writes it your
-   * display. You should use DMA to write the buffer's content to the display.
-   *      It will enable LVGL to draw the next part of the screen to the other
-   * buffer while the data is being sent form the first buffer. It makes
-   * rendering and flushing parallel.
-   *
-   * 3. Double buffering
-   *      Set 2 screens sized buffers and set disp_drv.full_refresh = 1.
-   *      This way LVGL will always provide the whole rendered screen in
-   * `flush_cb` and you only need to change the frame buffer's address.
-   */
+  // ILI9341 panel
+  esp_lcd_panel_handle_t panel_handle;
+  esp_lcd_panel_dev_config_t panel_cfg = {
+      .reset_gpio_num = -1,
+      .rgb_endian = LCD_RGB_ENDIAN_BGR,
+      .bits_per_pixel = 16,
+  };
+  ESP_ERROR_CHECK(
+      esp_lcd_new_panel_ili9341(io_handle, &panel_cfg, &panel_handle));
+  ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
+  ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+  ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle));
+  ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 
-  /* Example for 1) */
-  // static lv_disp_draw_buf_t draw_buf_dsc_1;
-  // static lv_color_t buf_1[MY_DISP_HOR_RES * 10];                          /*A
-  // buffer for 10 rows*/ lv_disp_draw_buf_init(&draw_buf_dsc_1, buf_1, NULL,
-  // MY_DISP_HOR_RES * 10);   /*Initialize the display buffer*/
-
-  /* Example for 2) */
-  static lv_disp_draw_buf_t draw_buf_dsc_2;
-  static lv_color_t buf_2_1[MY_DISP_HOR_RES * 10]; /*A buffer for 10 rows*/
-  static lv_color_t
-      buf_2_2[MY_DISP_HOR_RES * 10]; /*An other buffer for 10 rows*/
-  lv_disp_draw_buf_init(&draw_buf_dsc_2, buf_2_1, buf_2_2,
-                        MY_DISP_HOR_RES * 10); /*Initialize the display buffer*/
-
-  /* Example for 3) also set disp_drv.full_refresh = 1 below*/
-  // static lv_disp_draw_buf_t draw_buf_dsc_3;
-  // static lv_color_t buf_3_1[MY_DISP_HOR_RES * MY_DISP_VER_RES]; /*A screen
-  // sized buffer*/ static lv_color_t buf_3_2[MY_DISP_HOR_RES *
-  // MY_DISP_VER_RES];            /*Another screen sized buffer*/
-  // lv_disp_draw_buf_init(&draw_buf_dsc_3, buf_3_1, buf_3_2,
-  //                       MY_DISP_VER_RES * LV_VER_RES_MAX);   /*Initialize the
-  //                       display buffer*/
-
-  /*-----------------------------------
-   * Register the display in LVGL
-   *----------------------------------*/
-
-  static lv_disp_drv_t disp_drv; /*Descriptor of a display driver*/
-  lv_disp_drv_init(&disp_drv);   /*Basic initialization*/
-
-  /*Set up the functions to access to your display*/
-
-  /*Set the resolution of the display*/
-  disp_drv.hor_res = MY_DISP_HOR_RES;
-  disp_drv.ver_res = MY_DISP_VER_RES;
-
-  /*Used to copy the buffer's content to the display*/
-  disp_drv.flush_cb = disp_flush;
-
-  /*Set a display buffer*/
-  disp_drv.draw_buf = &draw_buf_dsc_2;
-
-  /*Required for Example 3)*/
-  // disp_drv.full_refresh = 1;
-
-  /* Fill a memory array with a color if you have GPU.
-   * Note that, in lv_conf.h you can enable GPUs that has built-in support in
-   * LVGL. But if you have a different GPU you can use with this callback.*/
-  // disp_drv.gpu_fill_cb = gpu_fill;
-
-  /*Finally register the driver*/
-  lv_disp_drv_register(&disp_drv);
+  // Add display to LVGL
+  lvgl_port_display_cfg_t disp_cfg = {
+      .io_handle = io_handle,
+      .panel_handle = panel_handle,
+      .buffer_size = 320 * 40,
+      .double_buffer = true,
+      .hres = 240,
+      .vres = 320,
+      .monochrome = false,
+      .flags = {.buff_dma = true, .buff_spiram = false},
+  };
+  display_handle = lvgl_port_add_disp(&disp_cfg);
+  ESP_LOGI(TAG, "Display initialized (240x320)");
 }
 
-/**********************
- *   STATIC FUNCTIONS
- **********************/
+void lv_port_indev_init(void) {
+  // I2C for touch
+  i2c_config_t i2c_cfg = {
+      .mode = I2C_MODE_MASTER,
+      .sda_io_num = 16,
+      .scl_io_num = 15,
+      .sda_pullup_en = GPIO_PULLUP_ENABLE,
+      .scl_pullup_en = GPIO_PULLUP_ENABLE,
+      .master.clk_speed = 400000,
+  };
+  ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &i2c_cfg));
+  ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
 
-/*Initialize your display and the required peripherals.*/
-static void disp_init(void) {
-  /*You code here*/
-  lvgl_driver_init();
+  // FT5x06 / FT6336G touch
+  esp_lcd_touch_handle_t touch_handle;
+  esp_lcd_touch_config_t touch_cfg = {
+      .x_max = 240,
+      .y_max = 320,
+      .rst_gpio_num = 18,
+      .int_gpio_num = -1,
+      .levels = {.reset = 0, .interrupt = 0},
+      .flags = {.swap_xy = 0, .mirror_x = 0, .mirror_y = 0},
+  };
+  ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_ft5x06(i2c_cfg.master.clk_speed,
+                                                 &touch_cfg, &touch_handle));
+
+  // Add touch to LVGL
+  lvgl_port_touch_cfg_t touch_glue = {
+      .disp = display_handle,
+      .handle = touch_handle,
+  };
+  lvgl_port_add_touch(&touch_glue);
+  ESP_LOGI(TAG, "Touch initialized (FT6336G)");
 }
-
-volatile bool disp_flush_enabled = true;
-
-/* Enable updating the screen (the flushing process) when disp_flush() is called
- * by LVGL
- */
-void disp_enable_update(void) { disp_flush_enabled = true; }
-
-/* Disable updating the screen (the flushing process) when disp_flush() is
- * called by LVGL
- */
-void disp_disable_update(void) { disp_flush_enabled = false; }
-
-/*Flush the content of the internal buffer the specific area on the display
- *You can use DMA or any hardware acceleration to do this operation in the
- *background but 'lv_disp_flush_ready()' has to be called when finished.*/
-static void disp_flush(lv_disp_drv_t *disp_drv, const lv_area_t *area,
-                       lv_color_t *color_p) {
-  disp_driver_flush(disp_drv, area, color_p);
-#if 0
-    if(disp_flush_enabled) {
-        /*The most simple case (but also the slowest) to put all pixels to the screen one-by-one*/
-
-        int32_t x;
-        int32_t y;
-        for(y = area->y1; y <= area->y2; y++) {
-            for(x = area->x1; x <= area->x2; x++) {
-                /*Put a pixel to the display. For example:*/
-                /*put_px(x, y, *color_p)*/
-                color_p++;
-            }
-        }
-    }
-
-    /*IMPORTANT!!!
-     *Inform the graphics library that you are ready with the flushing*/
-    lv_disp_flush_ready(disp_drv);
-#endif
-}
-
-/*OPTIONAL: GPU INTERFACE*/
-
-/*If your MCU has hardware accelerator (GPU) then you can use it to fill a
- * memory with a color*/
-// static void gpu_fill(lv_disp_drv_t * disp_drv, lv_color_t * dest_buf,
-// lv_coord_t dest_width,
-//                     const lv_area_t * fill_area, lv_color_t color)
-//{
-//     /*It's an example code which should be done by your GPU*/
-//     int32_t x, y;
-//     dest_buf += dest_width * fill_area->y1; /*Go to the first line*/
-//
-//     for(y = fill_area->y1; y <= fill_area->y2; y++) {
-//         for(x = fill_area->x1; x <= fill_area->x2; x++) {
-//             dest_buf[x] = color;
-//         }
-//         dest_buf+=dest_width;    /*Go to the next line*/
-//     }
-// }
-
-#else /*Enable this file at the top*/
-
-/*This dummy typedef exists purely to silence -Wpedantic.*/
-typedef int keep_pedantic_happy;
-#endif

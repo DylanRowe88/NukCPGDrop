@@ -6,7 +6,5 @@ idf_component_register(
         include
     REQUIRES
         lvgl
-        lvgl_esp32_drivers
-        lvgl_porting
         main
 )

@@ -254,7 +254,7 @@ def find_port_by_alias(alias):
     target_mac = resolve(alias)
     if not target_mac:
         return None
-    
+
     import serial.tools.list_ports
     for p in serial.tools.list_ports.comports():
         if (p.vid, p.pid) in ESP32_VID_PID:
@@ -274,7 +274,7 @@ def identify_boards():
         from scripts.board_config import load as load_aliases
         aliases = load_aliases()
     except: pass
-    
+
     ports = list(serial.tools.list_ports.comports())
     print("Scanning for ESP32-S3 boards...")
     for p in ports:
@@ -294,7 +294,7 @@ def confirm_and_flash(port, alias):
     """Confirm with the user before flashing, then flash."""
     mac = read_mac(port)
     print(f"  Target: '{alias}' at {port} (MAC: {mac})")
-    
+
     # Build and flash
     if not args.no_build:
         if not args.skip_lint: run_lint(); step_end("lint")
@@ -310,7 +310,7 @@ def confirm_and_flash(port, alias):
     time.sleep(1)
     verify_flash(port); step_end("verify")
     time.sleep(1)
-    
+
     is_native = port_vid(port) == 0x303A
     if not is_native:
         hard_reset_uart(port)
@@ -586,7 +586,16 @@ def connect_and_test_e2e():
 
     url = "http://192.168.4.1"
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        browser = pw.chromium.launch(
+            headless=False,
+            args=[
+                '--no-sandbox',
+                '--disable-web-security',
+                '--disable-features=BlockInsecurePrivateNetworkRequests',
+                '--disable-captive-portal-detection',
+                '--ignore-certificate-errors',
+                '--allow-insecure-localhost',
+            ])
         page = browser.new_page()
         ok(f"Navigating to {url}")
         try:
