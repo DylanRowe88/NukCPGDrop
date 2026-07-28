@@ -27,6 +27,18 @@ function writePerfReport() {
     }
 }
 
+const http = require('http');
+
+function httpGet(url) {
+    return new Promise((resolve, reject) => {
+        http.get(url, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+        }).on('error', reject);
+    });
+}
+
 async function fetchJson(url) {
     const resp = await fetch(url, { timeout: 10000 });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
@@ -53,7 +65,20 @@ before(async function () {
     } else {
         console.log(`Hardware mode: ${cfg.label} at ${TARGET_URL}`);
     }
-    browser = await chromium.launch({ headless: true });
+    const browserType = cfg.isQemu ? 'chromium' : 'chrome';
+    const launchOpts = {
+        headless: !cfg.isQemu === false,
+        args: [
+            '--no-sandbox',
+            '--disable-web-security',
+            '--disable-features=BlockInsecurePrivateNetworkRequests,BlockInsecurePrivateNetworkRequestsForNavigations',
+            '--disable-captive-portal-detection',
+            '--ignore-certificate-errors',
+            '--allow-insecure-localhost',
+        ],
+    };
+    if (browserType === 'chrome') launchOpts.channel = 'chrome';
+    browser = await chromium.launch(launchOpts);
 });
 
 after(async function () {

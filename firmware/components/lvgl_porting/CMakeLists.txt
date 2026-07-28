@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        lv_port_disp.c
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        lvgl
+        esp_lvgl_port
+        esp_lcd
+        esp_lcd_touch
+        esp_lcd_touch_ft5x06
+        driver
+        i2c_shared
+)

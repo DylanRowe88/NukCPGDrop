@@ -10,7 +10,7 @@
 #include "freertos/task.h"
 #include "led.h"
 #include "lv_port_disp.h"
-#include "lv_port_indev.h"
+/* lv_port_indev.h merged into lv_port_disp.h */
 #include "lvgl.h"
 #include "mdns.h"
 #include "pca9685.h"
