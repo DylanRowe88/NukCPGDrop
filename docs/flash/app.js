@@ -154,14 +154,14 @@ async function connectToPort(port) {
   }
 
   const [desc, features, mac, revision] = await Promise.all([
-    loader.chip.getChipDescription(loader).catch(() => ''),
+    loader.chip.getChipDescription(loader).catch(() => chipName),
     loader.chip.getChipFeatures(loader).catch(() => []),
     loader.chip.readMac(loader).catch(() => ''),
-    loader.chip.getChipRevision(loader).catch(() => 0),
+    loader.chip.getChipRevision(loader).catch(() => -1),
   ]);
   state.chipDesc = desc;
   state.chipFeatures = features;
-  state.mac = mac;
+  state.mac = mac || 'unknown';
   state.chipRevision = revision;
 
   let flashSize = '';
@@ -172,11 +172,13 @@ async function connectToPort(port) {
   state.flashSize = flashSize;
 
   /* Populate chip info */
+  clearStatus();
   els['chip-name'].textContent = chipName;
   els['chip-desc'].textContent = desc || chipName;
-  els['chip-revision'].textContent = 'v' + revision;
-  els['chip-mac'].textContent = mac;
-  els['chip-features'].textContent = features.join(', ') || '—';
+  const revDisplay = revision > 0 ? 'v' + revision : (desc.match(/revision\s+v?[\d.]+/i) || [''])[0] || '';
+  els['chip-revision'].textContent = revDisplay || '—';
+  els['chip-mac'].textContent = mac || '—';
+  els['chip-features'].textContent = Array.isArray(features) && features.length ? features.join(', ') : '—';
   els['chip-flash-size'].textContent = flashSize || '—';
   els['chip-info-card'].classList.remove('hidden');
 
@@ -272,15 +274,20 @@ async function checkPreviousPorts() {
 
 async function fetchReleases(detectInstalled) {
   els['release-table-body'].innerHTML = '<tr><td colspan="4" style="color:#999;text-align:center;padding:20px;">Loading releases...</td></tr>';
+  els['release-count'].textContent = 'Loading releases...';
 
   try {
-    const r = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=20`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=20`, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!r.ok) throw new Error('GitHub API error: ' + r.status);
     const releases = await r.json();
     state.releases = releases;
 
     if (releases.length === 0) {
       els['release-table-body'].innerHTML = '<tr><td colspan="4" style="color:#999;text-align:center;padding:20px;">No releases found.</td></tr>';
+      els['release-count'].textContent = '0 releases';
       return;
     }
 
@@ -302,6 +309,7 @@ async function fetchReleases(detectInstalled) {
 
   } catch (err) {
     els['release-table-body'].innerHTML = '<tr><td colspan="4" style="color:var(--color-error);text-align:center;padding:20px;">Failed to load releases: ' + err.message + '</td></tr>';
+    els['release-count'].textContent = 'Release load failed';
   }
 }
 
