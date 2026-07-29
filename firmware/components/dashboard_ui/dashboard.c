@@ -24,7 +24,6 @@ static void dashboard_update_task(void *arg) {
     vTaskDelayUntil(&last_wake_tick, pdMS_TO_TICKS(200));
 
     screen_main_update_indicators();
-    screen_main_update_progress();
 
     rssi_tick += 200;
     if (rssi_tick >= 2000) {
