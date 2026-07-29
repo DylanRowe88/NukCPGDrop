@@ -1,10 +1,10 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_err.h"
-#include "esp_log.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_touch.h"
 #include "esp_lcd_touch_ft5x06.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "i2c_bus.h"
@@ -235,10 +235,9 @@ void lv_port_disp_init(void) {
 static int touch_log_count = 0;
 static void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);
 
-
-
 void lv_port_indev_init(void) {
-  i2c_master_bus_handle_t bus = i2c_bus_init(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 100000);
+  i2c_master_bus_handle_t bus =
+      i2c_bus_init(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 100000);
   if (!bus) {
     ESP_LOGW(TAG, "I2C init failed — touch disabled");
     return;
@@ -250,7 +249,8 @@ void lv_port_indev_init(void) {
   gpio_set_level(TOUCH_RST, 1);
   vTaskDelay(pdMS_TO_TICKS(50));
 
-  const esp_lcd_panel_io_i2c_config_t io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+  const esp_lcd_panel_io_i2c_config_t io_config =
+      ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
   esp_lcd_panel_io_handle_t tp_io = NULL;
   if (esp_lcd_new_panel_io_i2c(bus, &io_config, &tp_io) != ESP_OK) {
     ESP_LOGW(TAG, "Touch IO init failed");
@@ -286,10 +286,12 @@ void lv_port_indev_init(void) {
     esp_err_t add_err = i2c_master_bus_add_device(b, &probe_cfg, &probe_dev);
     if (add_err == ESP_OK && probe_dev) {
       ESP_LOGI(TAG, "FT6336G device added OK");
-      uint8_t regs[] = {0x00,0x01,0x02,0x03,0x06,0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xA6,0xA7,0xA8,0xA9};
+      uint8_t regs[] = {0x00, 0x01, 0x02, 0x03, 0x06, 0xA0, 0xA1, 0xA2,
+                        0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9};
       for (int ri = 0; ri < 15; ri++) {
         uint8_t r = regs[ri], v = 0;
-        esp_err_t r_err = i2c_master_transmit_receive(probe_dev, &r, 1, &v, 1, pdMS_TO_TICKS(50));
+        esp_err_t r_err = i2c_master_transmit_receive(probe_dev, &r, 1, &v, 1,
+                                                      pdMS_TO_TICKS(50));
         if (r_err == ESP_OK)
           ESP_LOGI(TAG, "FT6336G[0x%02X] = 0x%02X", r, v);
         else
@@ -320,7 +322,8 @@ void lv_port_indev_init(void) {
 void touch_read_data(void) {}
 
 static void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
-  if (!tp_handle) return;
+  if (!tp_handle)
+    return;
   esp_err_t err = esp_lcd_touch_read_data(tp_handle);
   uint8_t point_cnt = 0;
   esp_lcd_touch_point_data_t pts[1];

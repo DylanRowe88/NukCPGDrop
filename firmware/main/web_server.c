@@ -13,15 +13,15 @@
 #include "led.h"
 #include "pca9685.h"
 #if CONFIG_BOARD_DISPLAY
-#include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
+#include "sdmmc_cmd.h"
 #endif
+#include "driver/i2s_std.h"
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"
 #include "web_server.h"
 #include "wifi_manager.h"
-#include "driver/i2s_std.h"
 #include <math.h>
 #include <string.h>
 
@@ -144,8 +144,8 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
     cJSON *c = cJSON_CreateObject();
     char mac_str[18];
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
-             macs[i * 6], macs[i * 6 + 1], macs[i * 6 + 2],
-             macs[i * 6 + 3], macs[i * 6 + 4], macs[i * 6 + 5]);
+             macs[i * 6], macs[i * 6 + 1], macs[i * 6 + 2], macs[i * 6 + 3],
+             macs[i * 6 + 4], macs[i * 6 + 5]);
     cJSON_AddStringToObject(c, "mac", mac_str);
     cJSON_AddNumberToObject(c, "rssi", rssis[i]);
     cJSON_AddItemToArray(client_arr, c);
@@ -201,7 +201,8 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
   char buf[16];
   int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
   if (len <= 0) {
-    if (g_state.sound_enabled) audio_play_prompt(AUDIO_PROMPT_DROP_ALL);
+    if (g_state.sound_enabled)
+      audio_play_prompt(AUDIO_PROMPT_DROP_ALL);
     xTaskCreate(drop_sequence_task, "drop_seq", 4096, NULL, 4, NULL);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"started\"}");
@@ -235,7 +236,8 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
 
 static esp_err_t api_reset_handler(httpd_req_t *req) {
   servos_hold_all();
-  if (g_state.sound_enabled) audio_play_prompt(AUDIO_PROMPT_RESET);
+  if (g_state.sound_enabled)
+    audio_play_prompt(AUDIO_PROMPT_RESET);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"reset\"}");
   return ESP_OK;
@@ -288,11 +290,15 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
 static esp_err_t api_servo_config_handler(httpd_req_t *req) {
   char buf[512];
   int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
-  if (len <= 0) return ESP_FAIL;
+  if (len <= 0)
+    return ESP_FAIL;
   buf[len] = 0;
 
   cJSON *json = cJSON_Parse(buf);
-  if (!json) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+  if (!json) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json");
+    return ESP_FAIL;
+  }
 
   cJSON *sv = cJSON_GetObjectItem(json, "servos");
   if (sv) {
@@ -304,9 +310,12 @@ static esp_err_t api_servo_config_handler(httpd_req_t *req) {
         cJSON *d = cJSON_GetArrayItem(dir, i);
         cJSON *n = cJSON_GetArrayItem(mn, i);
         cJSON *x = cJSON_GetArrayItem(mx, i);
-        if (cJSON_IsBool(d)) g_state.servo_dir[i] = cJSON_IsTrue(d);
-        if (cJSON_IsNumber(n)) g_state.sv_min[i] = (uint16_t)n->valuedouble;
-        if (cJSON_IsNumber(x)) g_state.sv_max[i] = (uint16_t)x->valuedouble;
+        if (cJSON_IsBool(d))
+          g_state.servo_dir[i] = cJSON_IsTrue(d);
+        if (cJSON_IsNumber(n))
+          g_state.sv_min[i] = (uint16_t)n->valuedouble;
+        if (cJSON_IsNumber(x))
+          g_state.sv_max[i] = (uint16_t)x->valuedouble;
       }
       state_save();
     }
@@ -322,20 +331,24 @@ static esp_err_t api_audio_fft_handler(httpd_req_t *req) {
   cJSON *root = cJSON_CreateObject();
 #if CONFIG_BOARD_DISPLAY
   int num_samples = 512;
-  int16_t *buf = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+  int16_t *buf =
+      heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
   if (buf) {
     i2s_chan_handle_t rx_h;
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    i2s_chan_config_t chan_cfg =
+        I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT,
+                                                    I2S_SLOT_MODE_MONO),
         .gpio_cfg = {.mclk = 4, .bclk = 5, .ws = 7, .dout = 8, .din = 6},
     };
     size_t read = 0;
     if (i2s_new_channel(&chan_cfg, NULL, &rx_h) == ESP_OK &&
         i2s_channel_init_std_mode(rx_h, &std_cfg) == ESP_OK &&
         i2s_channel_enable(rx_h) == ESP_OK) {
-      i2s_channel_read(rx_h, buf, num_samples * sizeof(int16_t), &read, pdMS_TO_TICKS(500));
+      i2s_channel_read(rx_h, buf, num_samples * sizeof(int16_t), &read,
+                       pdMS_TO_TICKS(500));
       i2s_channel_disable(rx_h);
       i2s_del_channel(rx_h);
     }
@@ -344,10 +357,12 @@ static esp_err_t api_audio_fft_handler(httpd_req_t *req) {
     int bins[8] = {0};
     for (int i = 0; i < (int)(read / 2); i++) {
       int v = abs(buf[i]);
-      if (v > peak) peak = v;
+      if (v > peak)
+        peak = v;
       energy += v * v;
       int bin = (i * 8) / (read / 2);
-      if (bin < 8) bins[bin] += v;
+      if (bin < 8)
+        bins[bin] += v;
     }
     cJSON_AddNumberToObject(root, "peak", peak);
     cJSON_AddNumberToObject(root, "energy", (double)energy);
@@ -441,18 +456,22 @@ static esp_err_t api_test_audio_handler(httpd_req_t *req) {
   int num_samples = sample_rate * duration_ms / 1000;
   bool test_ok = false;
 
-  int16_t *sine = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
-  int16_t *recv_buf = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+  int16_t *sine =
+      heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+  int16_t *recv_buf =
+      heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
 
   if (sine && recv_buf) {
     for (int i = 0; i < num_samples; i++)
       sine[i] = (int16_t)(3000 * sinf(2 * 3.14159f * 1000 * i / sample_rate));
 
     i2s_chan_handle_t tx_h, rx_h;
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    i2s_chan_config_t chan_cfg =
+        I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT,
+                                                    I2S_SLOT_MODE_MONO),
         .gpio_cfg = {.mclk = 4, .bclk = 5, .ws = 7, .dout = 8, .din = 6},
     };
 
@@ -462,9 +481,11 @@ static esp_err_t api_test_audio_handler(httpd_req_t *req) {
         i2s_channel_enable(rx_h) == ESP_OK) {
 
       size_t written = 0, read = 0;
-      i2s_channel_write(tx_h, sine, num_samples * sizeof(int16_t), &written, pdMS_TO_TICKS(2000));
+      i2s_channel_write(tx_h, sine, num_samples * sizeof(int16_t), &written,
+                        pdMS_TO_TICKS(2000));
       vTaskDelay(pdMS_TO_TICKS(200));
-      i2s_channel_read(rx_h, recv_buf, num_samples * sizeof(int16_t), &read, pdMS_TO_TICKS(2000));
+      i2s_channel_read(rx_h, recv_buf, num_samples * sizeof(int16_t), &read,
+                       pdMS_TO_TICKS(2000));
 
       i2s_channel_disable(tx_h);
       i2s_del_channel(tx_h);
@@ -476,13 +497,15 @@ static esp_err_t api_test_audio_handler(httpd_req_t *req) {
       for (int i = 0; i < (read / 2); i++) {
         int v = abs(recv_buf[i]);
         energy += v * v;
-        if (v > peak) peak = v;
+        if (v > peak)
+          peak = v;
       }
 
       cJSON_AddNumberToObject(root, "samples_written", written / 2);
       cJSON_AddNumberToObject(root, "samples_read", read / 2);
       cJSON_AddNumberToObject(root, "peak_amplitude", peak);
-      cJSON_AddNumberToObject(root, "energy", (double)(energy / (read / 2 + 1)));
+      cJSON_AddNumberToObject(root, "energy",
+                              (double)(energy / (read / 2 + 1)));
       cJSON_AddBoolToObject(root, "mic_detected", peak > 100);
       test_ok = true;
     } else {
@@ -523,10 +546,13 @@ static esp_err_t api_test_sdcard_handler(httpd_req_t *req) {
   sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
   slot_config.width = 4;
 
-  esp_err_t ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+  esp_err_t ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config,
+                                          &mount_config, &card);
   if (ret == ESP_OK) {
     sdmmc_card_print_info(stdout, card);
-    cJSON_AddNumberToObject(root, "size_mb", (double)(card->csd.capacity * card->csd.sector_size / (1024 * 1024)));
+    cJSON_AddNumberToObject(
+        root, "size_mb",
+        (double)(card->csd.capacity * card->csd.sector_size / (1024 * 1024)));
 
     FILE *f = fopen("/sdcard/test.txt", "w");
     if (f) {
@@ -540,7 +566,8 @@ static esp_err_t api_test_sdcard_handler(httpd_req_t *req) {
     f = fopen("/sdcard/test.txt", "r");
     if (f) {
       char buf[64];
-      if (fgets(buf, sizeof(buf), f)) cJSON_AddStringToObject(root, "read", buf);
+      if (fgets(buf, sizeof(buf), f))
+        cJSON_AddStringToObject(root, "read", buf);
       fclose(f);
     }
     remove("/sdcard/test.txt");
@@ -571,10 +598,18 @@ static const httpd_uri_t api_uris[] = {
     {.uri = "/api/hold", .method = HTTP_POST, .handler = api_hold_handler},
     {.uri = "/api/reset", .method = HTTP_POST, .handler = api_reset_handler},
     {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_handler},
-    {.uri = "/api/servo_config", .method = HTTP_POST, .handler = api_servo_config_handler},
-    {.uri = "/api/audio/fft", .method = HTTP_GET, .handler = api_audio_fft_handler},
-    {.uri = "/api/test/audio", .method = HTTP_POST, .handler = api_test_audio_handler},
-    {.uri = "/api/test/sdcard", .method = HTTP_POST, .handler = api_test_sdcard_handler},
+    {.uri = "/api/servo_config",
+     .method = HTTP_POST,
+     .handler = api_servo_config_handler},
+    {.uri = "/api/audio/fft",
+     .method = HTTP_GET,
+     .handler = api_audio_fft_handler},
+    {.uri = "/api/test/audio",
+     .method = HTTP_POST,
+     .handler = api_test_audio_handler},
+    {.uri = "/api/test/sdcard",
+     .method = HTTP_POST,
+     .handler = api_test_sdcard_handler},
 };
 
 esp_err_t web_server_start(void) {
