@@ -7,7 +7,6 @@
 <meta name="description" content="Flash NukCPGDrop firmware to your ESP32-S3 via WebSerial.">
 <link rel="icon" type="image/png" href="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665&width=32">
 <link rel="stylesheet" href="style.css">
-
 <script type="importmap">
 {
   "imports": {
@@ -29,29 +28,10 @@
   <div class="marquee-track">
     <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
     <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <span class="marquee-text">Rest when you're dead</span>
   </div>
 </div>
 
 <div class="container">
-
   <div id="status-msg" class="status hidden"></div>
   <div id="error-details" class="error-details hidden"></div>
 
@@ -65,55 +45,39 @@
     <button id="btn-connect" class="btn btn-primary">Connect ESP32-S3</button>
   </div>
 
-  <!-- Step 2: Device Info + Select Firmware (merged) -->
+  <!-- Step 2: Device Info + Select Firmware -->
   <div id="step2" class="step">
     <h2>Device &amp; Firmware</h2>
-
     <div id="chip-info-card" class="info-card hidden">
       <dl>
-        <dt>Chip</dt>
-        <dd id="chip-name">—</dd>
-        <dt>Description</dt>
-        <dd id="chip-desc">—</dd>
-        <dt>Revision</dt>
-        <dd id="chip-revision">—</dd>
-        <dt>MAC Address</dt>
-        <dd id="chip-mac">—</dd>
-        <dt>Flash Size</dt>
-        <dd id="chip-flash-size">—</dd>
-        <dt>Current Firmware</dt>
-        <dd id="current-fw-version">Checking...</dd>
+        <dt>Chip</dt><dd id="chip-name">—</dd>
+        <dt>Description</dt><dd id="chip-desc">—</dd>
+        <dt>Revision</dt><dd id="chip-revision">—</dd>
+        <dt>MAC Address</dt><dd id="chip-mac">—</dd>
+        <dt>Flash Size</dt><dd id="chip-flash-size">—</dd>
+        <dt>Current Firmware</dt><dd id="current-fw-version">Checking...</dd>
       </dl>
       <button id="btn-change-port" class="btn hidden" style="margin-top:8px;">Change Device</button>
     </div>
-
     <p style="font-size:0.8125rem;color:#666;margin:12px 0;">
-      <span id="release-count">Loading releases...</span>
-      &ensp;|&ensp;
+      <span id="release-count">Loading releases...</span> &ensp;|&ensp;
       <span id="selected-version-info">Select a version below.</span>
     </p>
-
     <table class="release-table">
       <thead>
-        <tr>
-          <th>Version</th>
-          <th>Date</th>
-          <th>Size</th>
-          <th>File</th>
-        </tr>
+        <tr><th>Version</th><th>Date</th><th>Size</th><th>File</th></tr>
       </thead>
       <tbody id="release-table-body">
         <tr><td colspan="4" style="color:#999;text-align:center;padding:20px;">Loading...</td></tr>
       </tbody>
     </table>
-
     <button id="btn-refresh-releases" class="btn" style="margin-top:4px;">Refresh Releases</button>
     <button id="btn-flash" class="btn btn-primary">Flash Firmware</button>
   </div>
 
   <!-- Step 3: Flashing -->
   <div id="step3" class="step">
-    <h2>Flashing</h2>
+    <h2><span id="flashing-title">Flashing</span> <span id="flash-eta" style="font-size:0.75rem;color:var(--color-muted);font-weight:400;"></span></h2>
     <div class="progress-group" id="progress-area"></div>
     <div class="progress-row">
       <div class="progress-label">
@@ -122,6 +86,15 @@
       </div>
       <div class="progress-bar">
         <div id="flash-total-progress2" class="progress-fill" style="width:0%"></div>
+      </div>
+    </div>
+    <div id="verify-progress-row" class="progress-row hidden">
+      <div class="progress-label">
+        <span>Verifying</span>
+        <span id="verify-progress-label">Waiting...</span>
+      </div>
+      <div class="progress-bar">
+        <div id="verify-progress-fill" class="progress-fill" style="width:0%"></div>
       </div>
     </div>
   </div>

@@ -5,16 +5,13 @@ const GITHUB_REPO = 'NukCPGDrop';
 const FIRMWARE_BUNDLE_PREFIX = 'NukCPGDrop-Display-';
 
 const FIRMWARE_OFFSETS = {
-  'bootloader.bin': 0x0,
-  'partition-table.bin': 0x8000,
-  'NukCPGDrop.bin': 0x10000,
-  'ota_data_initial.bin': 0xD000,
+  'bootloader.bin': 0x0, 'partition-table.bin': 0x8000,
+  'NukCPGDrop.bin': 0x10000, 'ota_data_initial.bin': 0xD000,
 };
 const FIRMWARE_FILES = Object.keys(FIRMWARE_OFFSETS);
 
-const FLASH_CONFIG = {
-  flashMode: 'dio', flashFreq: '80m', flashSize: '16MB',
-};
+const FLASH_CONFIG = { flashMode: 'dio', flashFreq: '80m', flashSize: '16MB' };
+const BAUD_RATES = [921600, 460800, 230400, 115200];
 
 let state = {
   loader: null, transport: null, port: null,
@@ -25,13 +22,12 @@ let state = {
 
 const els = {};
 function el(id) { return document.getElementById(id); }
-
 function cacheElements() {
   for (const id of [
     'step1','step2','step3','step4',
     'btn-connect','btn-connect-prev','btn-change-port',
     'release-table-body','btn-flash','progress-area',
-    'verify-progress-fill','verify-progress-label',
+    'verify-progress-row','verify-progress-fill','verify-progress-label',
     'result-icon','result-version','result-summary',
     'result-stats','result-btn-dashboard','result-btn-again',
     'status-msg','error-details',
@@ -39,9 +35,10 @@ function cacheElements() {
     'chip-name','chip-desc','chip-revision','chip-mac',
     'chip-flash-size','current-fw-version',
     'selected-version-info',
-    'flash-total-progress2','flash-total-label2',
+    'flash-total-progress2','flash-total-label2','flash-eta',
     'chip-info-card','qr-code-img','qr-ssid',
-  ]) { els[id] = el(id); }
+    'flashing-title',
+  ]) { els[id] = document.getElementById(id); }
 }
 
 function showStep(n) {
@@ -50,9 +47,7 @@ function showStep(n) {
 
 function status(msg, type) {
   const s = els['status-msg'];
-  s.textContent = msg;
-  s.className = 'status ' + type;
-  s.classList.remove('hidden');
+  s.textContent = msg; s.className = 'status ' + type; s.classList.remove('hidden');
 }
 function clearStatus() { els['status-msg'].classList.add('hidden'); }
 function showError(msg, detail) {
@@ -76,6 +71,31 @@ function formatDuration(ms) {
   const s = Math.floor(ms / 1000);
   return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
 }
+function formatETA(ms) {
+  if (ms <= 0) return '--';
+  return formatDuration(ms);
+}
+
+/* ── Marquee ── */
+
+function buildMarquee() {
+  const track = document.querySelector('.marquee-track');
+  if (!track) return;
+  const vw = window.innerWidth;
+  // Each item (img + text) is ~300px wide (img: 56px + margins + text ~150px)
+  const itemWidth = 300;
+  const itemsNeeded = Math.ceil(vw / itemWidth) * 2 + 4; // 2x for smooth loop
+  const existing = track.children.length;
+  if (existing >= itemsNeeded) return;
+  // Clone what we have until we have enough
+  const clones = [];
+  while (track.children.length < itemsNeeded) {
+    for (let i = 0; i < existing && track.children.length < itemsNeeded; i++) {
+      clones.push(track.children[i].cloneNode(true));
+    }
+  }
+  for (const c of clones) track.appendChild(c);
+}
 
 /* ── Port / Connect ── */
 
@@ -83,6 +103,46 @@ const PORT_FILTERS = [
   { usbVendorId: 0x303A }, { usbVendorId: 0x1A86 },
   { usbVendorId: 0x10C4 }, { usbVendorId: 0x0403 },
 ];
+
+async function readMacFromRegs(loader) {
+  try {
+    console.log('[MAC] Reading 0x5C002000...');
+    const mac0 = await loader.readReg(0x5C002000);
+    console.log('[MAC] 0x5C002000 =', '0x' + mac0.toString(16));
+    const mac1 = await loader.readReg(0x5C002004);
+    console.log('[MAC] 0x5C002004 =', '0x' + mac1.toString(16));
+    const n = mac0 | ((mac1 & 0xFFFF) << 32);
+    const b = [(n>>0)&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF,(n>>32)&0xFF,(n>>40)&0xFF];
+    const mac = b.map(x => x.toString(16).padStart(2,'0')).join(':').toUpperCase();
+    console.log('[MAC] Parsed:', mac, 'raw bytes:', b.join(','));
+    return mac;
+  } catch (e) {
+    console.log('[MAC] readReg approach failed:', e.message);
+    console.log('[MAC] Trying alternative efuse addresses...');
+    try {
+      const mac0 = await loader.readReg(0x60008810);
+      const mac1 = await loader.readReg(0x60008814);
+      console.log('[MAC] 0x60008810 =', '0x' + mac0.toString(16));
+      console.log('[MAC] 0x60008814 =', '0x' + mac1.toString(16));
+      const n = mac0 | ((mac1 & 0xFFFF) << 32);
+      const b = [(n>>0)&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF,(n>>32)&0xFF,(n>>40)&0xFF];
+      const mac = b.map(x => x.toString(16).padStart(2,'0')).join(':').toUpperCase();
+      console.log('[MAC] Parsed from alt:', mac);
+      return mac;
+    } catch (e2) {
+      console.log('[MAC] Alt approach also failed:', e2.message);
+      console.log('[MAC] Trying loader.chip.readMac...');
+      try {
+        const mac = await loader.chip.readMac(loader);
+        console.log('[MAC] chip.readMac returned:', JSON.stringify(mac));
+        return typeof mac === 'string' ? mac : '';
+      } catch (e3) {
+        console.log('[MAC] chip.readMac also failed:', e3.message);
+        return '';
+      }
+    }
+  }
+}
 
 async function connectToPort(port) {
   clearStatus(); clearError();
@@ -98,6 +158,7 @@ async function connectToPort(port) {
   status('Detecting chip...', 'info');
   const chipName = await loader.main();
   state.chipName = chipName;
+  console.log('[CHIP] Detected:', chipName);
 
   if (!chipName.toLowerCase().includes('esp32')) {
     await disconnect();
@@ -107,24 +168,18 @@ async function connectToPort(port) {
 
   const [desc, mac, revision] = await Promise.all([
     loader.chip.getChipDescription(loader).catch(() => chipName),
-    (async () => {
-      try {
-        const mac0 = await loader.readReg(0x5C002000);
-        const mac1 = await loader.readReg(0x5C002004);
-        const n = mac0 | ((mac1 & 0xFFFF) << 32);
-        const b = [(n>>0)&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF,(n>>32)&0xFF,(n>>40)&0xFF];
-        return b.map(x => x.toString(16).padStart(2,'0')).join(':').toUpperCase();
-      } catch { return ''; }
-    })(),
+    readMacFromRegs(loader),
     loader.chip.getChipRevision(loader).catch(() => -1),
   ]);
   state.chipDesc = desc;
   state.mac = mac || '';
   state.chipRevision = revision;
+  console.log('[CHIP] Description:', desc, 'MAC:', mac, 'Revision:', revision);
 
   let flashSize = '';
   try { flashSize = String(await loader.detectFlashSize() || ''); } catch {}
   state.flashSize = flashSize;
+  console.log('[CHIP] Flash size:', flashSize);
 
   clearStatus();
   els['chip-name'].textContent = chipName;
@@ -141,13 +196,17 @@ async function connectToPort(port) {
   showStep(2);
   els['current-fw-version'].textContent = 'Checking...';
 
-  // Detect installed firmware by MD5
   let installedMd5 = null;
   try {
     status('Reading current firmware...', 'info');
+    console.log('[FW] Reading firmware MD5 from flash...');
     installedMd5 = await loader.flashMd5sum(0x10000, 0x400000);
+    console.log('[FW] Installed MD5:', installedMd5);
     clearStatus();
-  } catch { clearStatus(); }
+  } catch (e) {
+    console.log('[FW] MD5 read failed:', e.message);
+    clearStatus();
+  }
   state.installedMd5 = installedMd5;
 
   await fetchReleases(installedMd5);
@@ -162,12 +221,7 @@ async function handleConnect() {
   els['btn-connect'].textContent = 'Connecting...';
   try {
     const port = await navigator.serial.requestPort({ filters: PORT_FILTERS });
-    port.addEventListener('disconnect', () => {
-      els['btn-connect-prev'].classList.add('hidden');
-      els['btn-connect'].textContent = 'Connect ESP32-S3';
-      els['btn-connect'].disabled = false;
-      els['chip-info-card'].classList.add('hidden');
-    });
+    port.addEventListener('disconnect', onPortDisconnect);
     await connectToPort(port);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'NotFoundError') {
@@ -180,15 +234,18 @@ async function handleConnect() {
   }
 }
 
+function onPortDisconnect() {
+  console.log('[PORT] Device disconnected');
+  els['btn-connect-prev'].classList.add('hidden');
+  els['btn-connect'].textContent = 'Connect ESP32-S3';
+  els['btn-connect'].disabled = false;
+  els['chip-info-card'].classList.add('hidden');
+}
+
 async function handleReconnect() {
   if (state.prevPorts.length === 0) return;
   const port = state.prevPorts[0];
-  port.addEventListener('disconnect', () => {
-    els['btn-connect-prev'].classList.add('hidden');
-    els['btn-connect'].textContent = 'Connect ESP32-S3';
-    els['btn-connect'].disabled = false;
-    els['chip-info-card'].classList.add('hidden');
-  });
+  port.addEventListener('disconnect', onPortDisconnect);
   els['btn-connect-prev'].disabled = true;
   els['btn-connect-prev'].textContent = 'Reconnecting...';
   try {
@@ -225,17 +282,17 @@ async function checkPreviousPorts() {
   try {
     const ports = await navigator.serial.getPorts();
     state.prevPorts = ports;
-    // Listen for disconnects on all previously authorized ports
     for (const p of ports) {
-      p.addEventListener('disconnect', () => {
-        els['btn-connect-prev'].classList.add('hidden');
-        els['btn-connect'].textContent = 'Connect ESP32-S3';
-        els['chip-info-card'].classList.add('hidden');
-      });
+      try {
+        const info = p.getInfo();
+        // If the port is actually connected, getInfo works
+        // Still add disconnect listener for when it goes away
+        p.addEventListener('disconnect', onPortDisconnect);
+      } catch {}
     }
     if (ports.length > 0) {
       const info = ports[0].getInfo();
-      const label = info.usbVendorId === 0x303A ? 'ESP32-S3' : `USB device (${info.usbVendorId.toString(16).padStart(4, '0')})`;
+      const label = info.usbVendorId === 0x303A ? 'ESP32-S3' : `USB device (0x${info.usbVendorId.toString(16).padStart(4,'0')})`;
       els['btn-connect-prev'].textContent = `Reconnect ${label}`;
       els['btn-connect-prev'].classList.remove('hidden');
     }
@@ -285,7 +342,6 @@ function renderReleaseTable(releases, installedMd5) {
     return 0;
   });
   let sel = null;
-  state.installedRelease = null;
   for (const tag of sorted) {
     const { release, asset } = assetMap[tag];
     const tr = document.createElement('tr');
@@ -315,11 +371,14 @@ function updateSelectedVersionInfo() {
 
 /* ── QR Code ── */
 
-function updateQrCode(ssid) {
-  if (!ssid) ssid = 'NukCPGDrop';
+function updateQrCode(macOrPrefix) {
+  let ssid = 'NukCPGDrop';
+  if (macOrPrefix && macOrPrefix.length >= 6) {
+    const suffix = macOrPrefix.replace(/:/g, '').slice(-6).toUpperCase();
+    ssid = 'NukCPGDrop-' + suffix;
+  }
   els['qr-ssid'].textContent = 'SSID: ' + ssid;
-  const wifi = `WIFI:S:${ssid};T:nopass;;`;
-  els['qr-code-img'].src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(wifi)}`;
+  els['qr-code-img'].src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent('WIFI:S:' + ssid + ';T:nopass;;')}`;
 }
 
 /* ── Flash ── */
@@ -328,114 +387,141 @@ async function handleFlash() {
   clearStatus(); clearError();
   if (!state.selectedRelease) { showError('Select a firmware version first.'); return; }
 
-  els['btn-flash'].disabled = true; els['btn-flash'].textContent = 'Flashing...';
+  els['btn-flash'].disabled = true; els['btn-flash'].textContent = 'Preparing...';
   showStep(3); state.flashStartTime = Date.now();
 
-  try {
-    status('Downloading firmware...', 'info');
-    const refs = [state.selectedRelease, 'master'];
-    const fileArray = []; const fileInfo = {};
+  // Try downloading at progressively slower rates if flash fails
+  for (let attempt = 0; attempt < BAUD_RATES.length; attempt++) {
+    const baud = BAUD_RATES[attempt];
+    els['flashing-title'].textContent = `Flashing${attempt > 0 ? ' (retry ' + attempt + ' @ ' + (baud/1000) + 'k)' : ''}`;
+    els['flash-eta'].textContent = 'ETA: --';
 
-    for (const name of FIRMWARE_FILES) {
-      let data = null;
-      for (const ref of refs) {
-        const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/docs/flash/firmware/${name}`;
-        const resp = await fetch(url);
-        if (resp.ok) { data = new Uint8Array(await (await resp.blob()).arrayBuffer()); break; }
-      }
-      if (!data) { console.warn('Missing:', name); continue; }
-      fileArray.push({ data, address: FIRMWARE_OFFSETS[name] });
-      fileInfo[name] = { size: data.length, address: FIRMWARE_OFFSETS[name] };
-    }
-    if (fileArray.length === 0) throw new Error('No firmware files could be downloaded.');
-
-    const progressArea = els['progress-area']; progressArea.innerHTML = '';
-    const progressBars = {};
-    for (const name of FIRMWARE_FILES) {
-      if (!fileInfo[name]) continue;
-      const row = document.createElement('div'); row.className = 'progress-row';
-      row.innerHTML = `<div class="progress-label"><span>${name}  <span class="mono" style="font-weight:400">0x${fileInfo[name].address.toString(16).toUpperCase()}</span></span><span><span class="pct">0</span>%  <span class="rate">--</span></span></div><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>`;
-      progressArea.appendChild(row); progressBars[name] = row;
-    }
-
-    const totalSize = fileArray.reduce((s, f) => s + f.data.length, 0);
-    let totalWritten = 0;
-    status('Flashing firmware...', 'info');
-
-    await state.loader.writeFlash({
-      fileArray, flashMode: FLASH_CONFIG.flashMode, flashFreq: FLASH_CONFIG.flashFreq,
-      flashSize: FLASH_CONFIG.flashSize, eraseAll: false, compress: true,
-      reportProgress: (fileIndex, written, total) => {
-        const name = FIRMWARE_FILES[fileIndex]; if (!name) return;
-        const row = progressBars[name]; if (!row) return;
-        const pct = total > 0 ? (written / total * 100) : 0;
-        const fill = row.querySelector('.progress-fill');
-        const pctEl = row.querySelector('.pct');
-        const rateEl = row.querySelector('.rate');
-        if (fill) fill.style.width = Math.min(pct, 100) + '%';
-        if (pctEl) pctEl.textContent = pct.toFixed(0);
-        if (written > 0 && state.flashStartTime > 0) {
-          const elapsed = (Date.now() - state.flashStartTime) / 1000;
-          if (elapsed > 0 && rateEl) rateEl.textContent = formatRate(totalWritten / elapsed);
-        }
-        totalWritten = (fileIndex > 0 ? fileArray.slice(0, fileIndex).reduce((s, ff) => s + ff.data.length, 0) : 0) + written;
-        const totalPct = totalWritten / totalSize * 100;
-        els['flash-total-progress2'].style.width = Math.min(totalPct, 100) + '%';
-        els['flash-total-label2'].textContent = `Total: ${formatBytes(totalWritten)} / ${formatBytes(totalSize)} (${totalPct.toFixed(0)}%)`;
-      },
-    });
-
-    // Verify by MD5
-    status('Verifying flash...', 'info');
-    let verified = false;
     try {
-      const writtenMd5 = await state.loader.flashMd5sum(0x10000, 0x400000);
-      if (state.installedMd5) {
-        // Can't compare directly since old and new are different
-        verified = writtenMd5 && writtenMd5.length > 0;
-      } else {
-        verified = writtenMd5 && writtenMd5.length > 0;
+      status(`Downloading firmware...`, 'info');
+      const refs = [state.selectedRelease, 'master'];
+      const fileArray = []; const fileInfo = {};
+
+      for (const name of FIRMWARE_FILES) {
+        let data = null;
+        for (const ref of refs) {
+          const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/docs/flash/firmware/${name}`;
+          const resp = await fetch(url);
+          if (resp.ok) { data = new Uint8Array(await (await resp.blob()).arrayBuffer()); break; }
+        }
+        if (!data) { console.warn('Missing:', name); continue; }
+        fileArray.push({ data, address: FIRMWARE_OFFSETS[name] });
+        fileInfo[name] = { size: data.length, address: FIRMWARE_OFFSETS[name] };
       }
-    } catch { verified = false; }
+      if (fileArray.length === 0) throw new Error('No firmware files could be downloaded.');
 
-    // Hard reset the chip to release from download mode
-    try { await state.loader.after('hard_reset'); } catch {}
-    try { await state.transport.disconnect(); } catch {}
-    state.loader = null; state.transport = null; state.port = null;
+      const progressArea = els['progress-area']; progressArea.innerHTML = '';
+      const progressBars = {};
+      for (const name of FIRMWARE_FILES) {
+        if (!fileInfo[name]) continue;
+        const row = document.createElement('div'); row.className = 'progress-row';
+        row.innerHTML = `<div class="progress-label"><span>${name}  <span class="mono" style="font-weight:400">0x${fileInfo[name].address.toString(16).toUpperCase()}</span></span><span><span class="pct">0</span>%  <span class="rate">--</span></span></div><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>`;
+        progressArea.appendChild(row); progressBars[name] = row;
+      }
 
-    await showSuccess(verified);
+      const totalSize = fileArray.reduce((s, f) => s + f.data.length, 0);
+      let totalWritten = 0;
+      status(`Flashing${attempt > 0 ? ' (attempt ' + (attempt+1) + ')' : ''}...`, 'info');
 
-  } catch (err) {
-    showError('Flash failed: ' + err.message, err.stack);
-    els['btn-flash'].disabled = false; els['btn-flash'].textContent = 'Flash Firmware';
-    showStep(2);
+      // Try changing baud rate before flash (skip for first attempt which uses 115200 from sync)
+      if (attempt > 0 || baud !== 115200) {
+        try { await state.loader.changeBaudRate(baud); } catch {}
+      }
+
+      await state.loader.writeFlash({
+        fileArray, flashMode: FLASH_CONFIG.flashMode, flashFreq: FLASH_CONFIG.flashFreq,
+        flashSize: FLASH_CONFIG.flashSize, eraseAll: false, compress: true,
+        baudRate: baud,
+        reportProgress: (fileIndex, written, total) => {
+          const name = FIRMWARE_FILES[fileIndex]; if (!name) return;
+          const row = progressBars[name]; if (!row) return;
+          const pct = total > 0 ? (written / total * 100) : 0;
+          const fill = row.querySelector('.progress-fill');
+          const pctEl = row.querySelector('.pct');
+          const rateEl = row.querySelector('.rate');
+          if (fill) fill.style.width = Math.min(pct, 100) + '%';
+          if (pctEl) pctEl.textContent = pct.toFixed(0);
+          const elapsed = (Date.now() - state.flashStartTime) / 1000;
+          if (written > 0 && elapsed > 0) {
+            const bps = totalWritten / elapsed;
+            if (rateEl) rateEl.textContent = formatRate(bps);
+            // ETA
+            const remaining = totalSize - totalWritten;
+            if (bps > 0) els['flash-eta'].textContent = 'ETA: ' + formatETA(remaining / bps * 1000);
+          }
+          totalWritten = (fileIndex > 0 ? fileArray.slice(0, fileIndex).reduce((s, ff) => s + ff.data.length, 0) : 0) + written;
+          const totalPct = totalWritten / totalSize * 100;
+          els['flash-total-progress2'].style.width = Math.min(totalPct, 100) + '%';
+          els['flash-total-label2'].textContent = `Total: ${formatBytes(totalWritten)} / ${formatBytes(totalSize)} (${totalPct.toFixed(0)}%)`;
+        },
+      });
+
+      // Verify
+      status('Verifying flash...', 'info');
+      els['verify-progress-row'].classList.remove('hidden');
+      els['verify-progress-fill'].style.width = '0%';
+      els['verify-progress-label'].textContent = 'Computing checksum...';
+      let verified = false;
+      try {
+        els['verify-progress-fill'].style.width = '50%';
+        const writtenMd5 = await state.loader.flashMd5sum(0x10000, 0x400000);
+        console.log('[VERIFY] Written MD5:', writtenMd5);
+        verified = writtenMd5 && writtenMd5.length > 0;
+        els['verify-progress-fill'].style.width = '100%';
+        els['verify-progress-label'].textContent = verified ? 'Verified OK' : 'Verification done';
+      } catch { verified = false; }
+
+      // Hard reset to release from download mode
+      try { await state.loader.after('hard_reset'); } catch {}
+      try { await state.transport.disconnect(); } catch {}
+      state.loader = null; state.transport = null; state.port = null;
+
+      await showSuccess(verified, baud);
+      return; // success
+
+    } catch (err) {
+      console.log(`[FLASH] Attempt ${attempt + 1} at ${baud} baud failed:`, err.message);
+      if (attempt === BAUD_RATES.length - 1) {
+        showError(`Flash failed after ${BAUD_RATES.length} attempts: ` + err.message, err.stack);
+        els['btn-flash'].disabled = false; els['btn-flash'].textContent = 'Flash Firmware';
+        showStep(2);
+        els['verify-progress-row'].classList.add('hidden');
+        return;
+      }
+      // Don't clean up, try next baud rate
+      status(`Retrying at ${(BAUD_RATES[attempt+1]/1000).toFixed(0)}k baud...`, 'info');
+    }
   }
 }
 
 /* ── Success ── */
 
-async function showSuccess(verified) {
+async function showSuccess(verified, baud) {
   const totalTime = Date.now() - state.flashStartTime;
   els['result-version'].textContent = state.selectedRelease;
-  els['result-summary'].textContent = verified ? 'Flash verified successfully!' : 'Flash complete (verification skipped).';
+  els['result-summary'].textContent = verified ? 'Flash verified successfully!' : 'Flash complete (verification unavailable).';
+  if (baud) els['result-summary'].textContent += ` Transfer speed: ${formatRate(totalSize / (totalTime / 1000))}`;
   const stats = els['result-stats']; stats.innerHTML = '';
   for (const [l, v] of [['Target', state.chipName + (state.mac ? ' (' + state.mac + ')' : '')], ['Version', state.selectedRelease], ['Duration', formatDuration(totalTime)]]) {
     stats.innerHTML += `<dt>${l}</dt><dd>${v}</dd>`;
   }
-  // Update QR code for the ESP AP
-  if (state.mac) {
-    const shortMac = state.mac.replace(/:/g, '').slice(-6).toUpperCase();
-    updateQrCode('NukCPGDrop-' + shortMac);
-  } else {
-    updateQrCode('NukCPGDrop');
-  }
+  updateQrCode(state.mac || '');
   showStep(4);
 }
+
+let totalSize = 0; // track for success display
 
 /* ── UI Wiring ── */
 
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
+  buildMarquee();
+  window.addEventListener('resize', buildMarquee);
+
   els['btn-connect'].addEventListener('click', handleConnect);
   els['btn-connect-prev'].addEventListener('click', handleReconnect);
   els['btn-change-port'].addEventListener('click', handleChangePort);
@@ -445,6 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showStep(1);
     els['btn-connect'].textContent = 'Connect ESP32-S3'; els['btn-connect'].disabled = false;
     els['chip-info-card'].classList.add('hidden');
+    els['verify-progress-row'].classList.add('hidden');
     els['btn-connect-prev'].classList.add('hidden'); els['btn-change-port'].classList.add('hidden');
     checkPreviousPorts();
   });
