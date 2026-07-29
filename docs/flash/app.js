@@ -411,19 +411,26 @@ async function handleFlash() {
     status('Downloading firmware...', 'info');
 
     // Download each firmware file from raw.githubusercontent.com (CORS-enabled)
-    const baseUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${state.selectedRelease}/docs/flash/firmware`;
+    // Try the selected release tag first, then fall back to master
+    const refs = [state.selectedRelease, 'master'];
     const fileArray = [];
     const fileInfo = {};
 
     for (const name of FIRMWARE_FILES) {
-      const url = `${baseUrl}/${name}`;
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        console.warn('Missing firmware file:', name, resp.status);
+      let data = null;
+      for (const ref of refs) {
+        const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/docs/flash/firmware/${name}`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          data = new Uint8Array(await blob.arrayBuffer());
+          break;
+        }
+      }
+      if (!data) {
+        console.warn('Missing firmware file:', name);
         continue;
       }
-      const blob = await resp.blob();
-      const data = new Uint8Array(await blob.arrayBuffer());
       const addr = FIRMWARE_OFFSETS[name];
       fileArray.push({ data, address: addr });
       fileInfo[name] = { data, size: data.length, address: addr };
