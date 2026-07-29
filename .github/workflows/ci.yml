@@ -43,11 +43,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="v1.0.${{ github.run_number }}"
+          cat > release-notes.md <<- EOF
+          Build firmware locally with:
+            python flash.py --board DisplayBoard
+          Then upload the bundle with:
+            gh release upload $VERSION NukCPGDrop-Display-$VERSION.zip
+          EOF
           gh release create "$VERSION" \
             --title "NukCPGDrop $VERSION" \
-            --notes "Build firmware locally with:
-  python flash.py --board DisplayBoard
-
-Then upload the bundle with:
-  gh release upload $VERSION NukCPGDrop-Display-${VERSION}.zip" \
+            --notes-file release-notes.md \
             --draft

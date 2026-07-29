@@ -155,7 +155,19 @@ async function connectToPort(port) {
 
   const [desc, mac, revision] = await Promise.all([
     loader.chip.getChipDescription(loader).catch(() => chipName),
-    loader.chip.readMac(loader).catch(() => ''),
+    (async () => {
+      try {
+        const mac0 = await loader.readReg(0x5C002000);
+        const mac1 = await loader.readReg(0x5C002004);
+        const macNum = mac0 | ((mac1 & 0xFFFF) << 32);
+        const bytes = [
+          (macNum >>  0) & 0xFF, (macNum >>  8) & 0xFF,
+          (macNum >> 16) & 0xFF, (macNum >> 24) & 0xFF,
+          (macNum >> 32) & 0xFF, (macNum >> 40) & 0xFF,
+        ];
+        return bytes.map(b => b.toString(16).padStart(2, '0')).join(':').toUpperCase();
+      } catch { return ''; }
+    })(),
     loader.chip.getChipRevision(loader).catch(() => -1),
   ]);
   state.chipDesc = desc;

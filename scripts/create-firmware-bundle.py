@@ -50,11 +50,14 @@ def main():
         "files": files,
     }
 
+    name_to_path = {name: rel_path for name, rel_path, _ in BINARY_MANIFEST}
+
     with zipfile.ZipFile(args.output, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))
         for entry in files:
-            src = build_dir / BINARY_MANIFEST[[m["name"] for m in BINARY_MANIFEST].index(entry["name"])][1]
-            zf.write(src, entry["name"])
+            rel = name_to_path.get(entry["name"])
+            if rel:
+                zf.write(build_dir / rel, entry["name"])
 
     print(f"  Created {args.output} ({os.path.getsize(args.output) / 1024:.0f} KB)")
     print(f"  Board: {args.board}, Version: {manifest['version']}")

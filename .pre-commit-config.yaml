@@ -103,6 +103,43 @@ repos:
               '--board', 'DisplayBoard', '--version', version]);
             sys.exit(r.returncode)
 
+      - id: create-github-release
+        name: Create GitHub release from local build
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-push]
+        entry: python
+        args:
+          - -c
+          - >
+            import subprocess, sys, os, glob;
+            branch = subprocess.run(['git','rev-parse','--abbrev-ref','HEAD'],
+              capture_output=True,text=True).stdout.strip();
+            if branch != 'master':
+              print('[skip] Not on master branch'); sys.exit(0);
+            tag = subprocess.run(['git','describe','--tags','--abbrev=0','--match','v*'],
+              capture_output=True,text=True).stdout.strip();
+            if not tag:
+              print('[skip] No version tag found'); sys.exit(0);
+            zips = glob.glob(f'NukCPGDrop-Display-{tag}.zip');
+            if not zips:
+              print(f'[skip] NukCPGDrop-Display-{tag}.zip not found'); sys.exit(0);
+            zipfile = zips[0];
+            r = subprocess.run(['gh','release','view',tag,'--json','tagName'],
+              capture_output=True,text=True);
+            exists = r.returncode == 0;
+            if not exists:
+              print(f'Creating release {tag}...');
+              subprocess.run(['gh','release','create',tag,'--title',
+                f'NukCPGDrop {tag}','--notes','Local build','--draft']);
+            print(f'Uploading {zipfile}...');
+            subprocess.run(['gh','release','upload',tag,zipfile,'--clobber']);
+            if exists:
+              print(f'Updated release {tag}');
+            else:
+              print(f'Created draft release {tag} - publish with: gh release edit {tag} --draft=false')
+
       - id: e2e-test-qemu
         name: E2E QEMU test (Playwright)
         language: system
