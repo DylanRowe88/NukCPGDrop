@@ -137,7 +137,7 @@ async function handleConnect() {
     const port = await navigator.serial.requestPort({ filters: PORT_FILTERS });
     state.port = port;
 
-    await port.open({ baudRate: 115200 });
+    // Transport auto-opens the port (don't call port.open() separately)
     const transport = new Transport(port, true);
     state.transport = transport;
 
