@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("NukCPGDrop.Ui")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0d390d5ecf789b0c7bc52ee90a1e3b8a8c5abfaf")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4f74b1408a657b4a61c199d04fedef012a0f7c35")]
 [assembly: System.Reflection.AssemblyProductAttribute("NukCPGDrop.Ui")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NukCPGDrop.Ui")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

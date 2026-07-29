@@ -70,10 +70,13 @@ static void action_btn_cb(lv_event_t *e) {
       break;
     }
   }
-  if (all_held)
-    servos_release_all();
-  else
+  if (all_held) {
+    g_seq_running = true;
+    screen_main_set_seq_running(true);
+    servos_start_sequence();
+  } else {
     servos_hold_all();
+  }
 }
 
 static void interval_slider_cb(lv_event_t *e) {

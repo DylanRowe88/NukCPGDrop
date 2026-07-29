@@ -1,7 +1,10 @@
 #include "servos.h"
 #include "esp_check.h"
+#include "esp_random.h"
 #include "pca9685.h"
 #include "state.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 
 #define SERVO_PULSE_MIN_US 500
@@ -111,3 +114,44 @@ bool servos_is_held(uint8_t index) {
 }
 
 bool servos_pca9685_present(void) { return g_pca9685_found; }
+
+static void shuffle(uint8_t *arr, size_t n) {
+  for (size_t i = n - 1; i > 0; i--) {
+    size_t j = (size_t)(esp_random() % (i + 1));
+    uint8_t t = arr[j];
+    arr[j] = arr[i];
+    arr[i] = t;
+  }
+}
+
+static void sequence_task(void *arg) {
+  (void)arg;
+  uint8_t order[6] = {0, 1, 2, 3, 4, 5};
+  shuffle(order, 6);
+  state_save_sequence(order, 0);
+
+  uint8_t i = 0;
+  while (i < 6) {
+    int batch = g_state.double_drop && i < 5 ? 2 : 1;
+    if (batch == 2) {
+      uint8_t pair[2] = {order[i], order[i + 1]};
+      servos_drop_batch(pair, 2);
+      i += 2;
+    } else {
+      servos_drop(order[i]);
+      i++;
+    }
+    state_save_sequence(order, i);
+    state_increment_drop_count();
+    if (i < 6) {
+      uint32_t interval = state_get_drop_interval_ms(g_state.difficulty);
+      vTaskDelay(pdMS_TO_TICKS(interval));
+    }
+  }
+  vTaskDelete(NULL);
+}
+
+esp_err_t servos_start_sequence(void) {
+  xTaskCreate(sequence_task, "drop_seq", 4096, NULL, 4, NULL);
+  return ESP_OK;
+}

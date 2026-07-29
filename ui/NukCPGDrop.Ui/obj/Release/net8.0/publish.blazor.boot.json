@@ -1,7 +1,7 @@
 {
   "mainAssemblyName": "NukCPGDrop.Ui",
   "resources": {
-    "hash": "sha256-h9hvp9UkNrQ+tGVQiyMjK7BZfEoBaUSddMmi+0tQAa4=",
+    "hash": "sha256-N+6A9a5WS+q/OED1R7fSP9zRjqmgJiV4WZah8W2uFak=",
     "jsModuleNative": {
       "dotnet.native.js": "sha256-YDHEHpc+/PUWFYa9BMCN3EcVlpemjKD024swcpPfMIQ="
     },
@@ -45,7 +45,7 @@
       "System.Text.RegularExpressions.wasm": "sha256-QDY1fw+uRh8SRATrPAVeYk+dujYqfGm5T/c2iNubvj0=",
       "System.Threading.wasm": "sha256-aijIo9C3m+brvr2pAaUBxq74zX2hzPEvgojYtbaKHSE=",
       "System.Private.CoreLib.wasm": "sha256-PiBS6sLk2zmBVXV66rdBdI/DmyKgcEVXEWeY9D6pr8c=",
-      "NukCPGDrop.Ui.wasm": "sha256-Yyv+6l9Irxa9cBXgsPoB2sQ6iyZPRHA6nqUNYe4NLC0="
+      "NukCPGDrop.Ui.wasm": "sha256-9AdmhsBmXsM9LCLKCMWddsXjy6PaZFutC8RGf+rB0jM="
     }
   },
   "cacheBootResources": true,

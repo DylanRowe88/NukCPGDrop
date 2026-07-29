@@ -23,6 +23,7 @@ esp_err_t servos_hold_all(void);
 esp_err_t servos_release_all(void);
 bool servos_is_held(uint8_t index);
 bool servos_pca9685_present(void);
+esp_err_t servos_start_sequence(void);
 
 #ifdef __cplusplus
 }

@@ -1020,6 +1020,6 @@ C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\NukCP
 C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\refint\NukCPGDrop.Ui.dll
 C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\NukCPGDrop.Ui.pdb
 C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\ref\NukCPGDrop.Ui.dll
-C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\compressed\buf2y1q29t-{0}-9p5bnbyxx0-9p5bnbyxx0.gz
-C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\compressed\kk7vtdyq8j-{0}-e7afffwagf-e7afffwagf.gz
-C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\compressed\uzt9jiubtu-{0}-iyj18xhaug-iyj18xhaug.gz
+C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\compressed\buf2y1q29t-{0}-o3z9y32af7-o3z9y32af7.gz
+C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\compressed\kk7vtdyq8j-{0}-rzbah76qtz-rzbah76qtz.gz
+C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\obj\Release\net8.0\compressed\uzt9jiubtu-{0}-tg7xnks6pz-tg7xnks6pz.gz
