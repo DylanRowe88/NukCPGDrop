@@ -12,6 +12,7 @@ const char *wifi_ap_get_ssid(void);
 const char *wifi_ap_get_ip(void);
 int wifi_ap_get_sta_count(void);
 int wifi_ap_get_rssi(void);
+int wifi_ap_get_sta_list(uint8_t *macs, int *rssis, int max_count);
 
 #if defined(CONFIG_E2E_TEST) && CONFIG_E2E_TEST
 esp_err_t wifi_sta_connect(const char *ssid);

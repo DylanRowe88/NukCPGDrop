@@ -1,6 +1,7 @@
 #include "servos.h"
 #include "esp_check.h"
 #include "pca9685.h"
+#include "state.h"
 #include <string.h>
 
 #define SERVO_PULSE_MIN_US 500
@@ -18,8 +19,14 @@ static uint16_t pulse_to_pca9685(uint16_t pulse_us) {
   return (uint16_t)((uint32_t)pulse_us * PCA9685_MAX_VALUE / SERVO_CYCLE_US);
 }
 
-static uint16_t position_to_pulse(servo_position_t pos) {
-  return pos == SERVO_POSITION_HOLD ? SERVO_PULSE_MIN_US : SERVO_PULSE_MAX_US;
+static uint16_t servo_pulse_for(uint8_t index, bool held) {
+  bool dir = (index < 6) ? g_state.servo_dir[index] : false;
+  uint16_t min_pulse = SERVO_PULSE_MIN_US;
+  uint16_t max_pulse = SERVO_PULSE_MAX_US;
+  if (dir) {
+    return held ? max_pulse : min_pulse;
+  }
+  return held ? min_pulse : max_pulse;
 }
 
 esp_err_t servos_init(void) {
@@ -58,9 +65,10 @@ esp_err_t servos_init(void) {
 esp_err_t servos_set(uint8_t index, servo_position_t pos) {
   if (index >= SERVO_COUNT)
     return ESP_ERR_INVALID_ARG;
-  uint16_t pulse = position_to_pulse(pos);
+  bool held = (pos == SERVO_POSITION_HOLD);
+  uint16_t pulse = servo_pulse_for(index, held);
   uint16_t val = pulse_to_pca9685(pulse);
-  g_held[index] = (pos == SERVO_POSITION_HOLD);
+  g_held[index] = held;
   return pca9685_set_channel_raw(g_pca, index, val);
 }
 
@@ -77,7 +85,7 @@ esp_err_t servos_drop_batch(const uint8_t *indices, uint8_t count) {
     if (idx >= SERVO_COUNT)
       return ESP_ERR_INVALID_ARG;
     channels[i] = idx;
-    values[i] = pulse_to_pca9685(SERVO_PULSE_MAX_US);
+    values[i] = pulse_to_pca9685(servo_pulse_for(idx, false));
     g_held[idx] = false;
   }
 

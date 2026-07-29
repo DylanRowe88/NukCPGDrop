@@ -21,6 +21,14 @@ public class WifiInfo
     public int Rssi { get; set; }
     public int Clients { get; set; }
     public string Version { get; set; } = "";
+    [JsonPropertyName("clients_list")]
+    public ClientInfo[]? ClientsList { get; set; }
+}
+
+public class ClientInfo
+{
+    public string Mac { get; set; } = "";
+    public int Rssi { get; set; }
 }
 
 public class SystemStatus

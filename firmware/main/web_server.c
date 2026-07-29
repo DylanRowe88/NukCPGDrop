@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "audio.h"
 #include "cJSON.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
@@ -12,7 +13,6 @@
 #include "led.h"
 #include "pca9685.h"
 #include "sdmmc_cmd.h"
-#include "driver/sdmmc_host.h"
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"
@@ -28,7 +28,7 @@ static httpd_handle_t g_server = NULL;
 extern bool g_pca9685_present;
 
 static SemaphoreHandle_t g_servo_sem = NULL;
-#define MAX_CONCURRENT_SERVOS 2
+#define MAX_CONCURRENT_SERVOS 6
 
 static esp_err_t ensure_servo_sem(void) {
   if (!g_servo_sem) {
@@ -133,6 +133,21 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(wifi, "rssi", wifi_ap_get_rssi());
   cJSON_AddNumberToObject(wifi, "clients", wifi_ap_get_sta_count());
   cJSON_AddStringToObject(wifi, "version", "NukCPGDrop v1.0");
+  cJSON *client_arr = cJSON_CreateArray();
+  uint8_t macs[6 * 8];
+  int rssis[8];
+  int n = wifi_ap_get_sta_list(macs, rssis, 8);
+  for (int i = 0; i < n; i++) {
+    cJSON *c = cJSON_CreateObject();
+    char mac_str[18];
+    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+             macs[i * 6], macs[i * 6 + 1], macs[i * 6 + 2],
+             macs[i * 6 + 3], macs[i * 6 + 4], macs[i * 6 + 5]);
+    cJSON_AddStringToObject(c, "mac", mac_str);
+    cJSON_AddNumberToObject(c, "rssi", rssis[i]);
+    cJSON_AddItemToArray(client_arr, c);
+  }
+  cJSON_AddItemToObject(wifi, "clients_list", client_arr);
   cJSON_AddItemToObject(root, "wifi", wifi);
 
   cJSON *battery = cJSON_CreateObject();
@@ -183,6 +198,7 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
   char buf[16];
   int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
   if (len <= 0) {
+    if (g_state.sound_enabled) audio_play_prompt(AUDIO_PROMPT_DROP_ALL);
     xTaskCreate(drop_sequence_task, "drop_seq", 4096, NULL, 4, NULL);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"started\"}");
@@ -216,6 +232,7 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
 
 static esp_err_t api_reset_handler(httpd_req_t *req) {
   servos_hold_all();
+  if (g_state.sound_enabled) audio_play_prompt(AUDIO_PROMPT_RESET);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"reset\"}");
   return ESP_OK;

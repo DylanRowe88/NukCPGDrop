@@ -236,6 +236,17 @@ int wifi_ap_get_rssi(void) {
   esp_wifi_ap_get_sta_list(&sta);
   if (sta.num == 0)
     return -100;
-  // Return RSSI of first connected station
   return sta.sta[0].rssi;
+}
+
+int wifi_ap_get_sta_list(uint8_t *macs, int *rssis, int max_count) {
+  wifi_sta_list_t sta;
+  esp_wifi_ap_get_sta_list(&sta);
+  int count = (int)sta.num;
+  if (count > max_count) count = max_count;
+  for (int i = 0; i < count; i++) {
+    memcpy(macs + i * 6, sta.sta[i].mac, 6);
+    rssis[i] = sta.sta[i].rssi;
+  }
+  return count;
 }

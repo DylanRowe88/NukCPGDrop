@@ -32,6 +32,16 @@
                 <span>WiFi Clients</span>
                 <span class="stat-value">@(_status?.Wifi?.Clients ?? 0)</span>
             </div>
+            @if (_status?.Wifi?.ClientsList != null)
+            {
+                foreach (var cl in _status.Wifi.ClientsList)
+                {
+                    <div class="stat-row client-row">
+                        <span class="client-mac">@cl.Mac</span>
+                        <span class="stat-value">@cl.Rssi dBm</span>
+                    </div>
+                }
+            }
             <div class="stat-row">
                 <span>Your IP</span>
                 <span class="stat-value">@clientIp</span>
@@ -198,8 +208,28 @@
     {
         try
         {
-            var js = $"drawSpectrum({string.Join(",", bins)})";
-            await JSRuntime.InvokeVoidAsync("eval", js);
+            var c = await JSRuntime.InvokeAsync<IJSObjectReference>("eval", "document.getElementById('fftCanvas')");
+            if (c != null)
+            {
+                var ctx = await c.InvokeAsync<IJSObjectReference>("getContext", "2d");
+                int w = 520, h = 160;
+                await ctx.InvokeVoidAsync("clearRect", 0, 0, w, h);
+                int max = Math.Max(1, bins.Max());
+                int barW = (w - 16) / bins.Length;
+                for (int i = 0; i < bins.Length; i++)
+                {
+                    int barH = (int)((double)bins[i] / max * (h - 16));
+                    int x = 8 + i * barW;
+                    string? color = i < 3 ? "#28a745" : i < 6 ? "#e6a700" : "#e63946";
+                    await ctx.InvokeVoidAsync("fillStyle", color);
+                    await ctx.InvokeVoidAsync("fillRect", x + 2, h - 8 - barH, barW - 4, barH);
+                }
+                await ctx.InvokeVoidAsync("fillStyle", "#888");
+                await ctx.InvokeVoidAsync("font", "9px sans-serif");
+                await ctx.InvokeVoidAsync("textAlign", "center");
+                for (int i = 0; i < bins.Length; i++)
+                    await ctx.InvokeVoidAsync("fillText", (i * 1000) + "Hz", 8 + i * barW + barW / 2, h - 1);
+            }
         }
         catch { }
     }
@@ -286,6 +316,8 @@
     .stat-value { font-weight: 600; }
     .stat-value.ok { color: #28a745; }
     .stat-value.err { color: #dc3545; }
+    .client-row { font-size: 0.75rem; padding-left: 1rem; }
+    .client-mac { font-family: monospace; font-size: 0.7rem; }
     .servo-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.4rem; background: #1a1a1a; border-radius: 6px; }
     .servo-head { display: flex; flex-direction: column; align-items: center; min-width: 45px; gap: 2px; }
     .servo-label { font-size: 0.85rem; font-weight: 700; }

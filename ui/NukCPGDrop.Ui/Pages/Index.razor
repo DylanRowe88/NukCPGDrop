@@ -50,7 +50,7 @@
         <DropStatus Held="@(_status?.Held ?? new bool[6])"
                     DroppingIndex="@_droppingIndex"
                     SequenceActive="@_isRunning"
-                    OnToggleCan="OnToggleCan" />
+                    OnToggleCan="@HandleToggleCan" />
     </div>
 
     <div class="status-bar">
@@ -155,10 +155,12 @@
 
     private async Task AnimateDrop(int idx) { _droppingIndex = idx; StateHasChanged(); await Task.Delay(500); if (_droppingIndex == idx) _droppingIndex = -1; }
 
-    private async Task OnToggleCan(int idx)
+    private async Task HandleToggleCan(int idx)
     {
         if (_status == null || idx >= _status.Held.Length) return;
-        if (_status.Held[idx]) await Api.DropOneAsync(idx + 1); else await Api.HoldOneAsync(idx + 1);
+        bool wasHeld = _status.Held[idx];
+        if (wasHeld) await Api.DropOneAsync(idx + 1); else await Api.HoldOneAsync(idx + 1);
+        await Task.Delay(100);
         await RefreshStatus();
     }
 
