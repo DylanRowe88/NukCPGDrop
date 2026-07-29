@@ -153,14 +153,12 @@ async function connectToPort(port) {
     return;
   }
 
-  const [desc, features, mac, revision] = await Promise.all([
+  const [desc, mac, revision] = await Promise.all([
     loader.chip.getChipDescription(loader).catch(() => chipName),
-    loader.chip.getChipFeatures(loader).catch(() => []),
-    loader.chip.readMac(loader).catch(() => ''),
+    loader.readMac().catch(() => ''),
     loader.chip.getChipRevision(loader).catch(() => -1),
   ]);
   state.chipDesc = desc;
-  state.chipFeatures = features;
   state.mac = mac || 'unknown';
   state.chipRevision = revision;
 
@@ -178,7 +176,6 @@ async function connectToPort(port) {
   const revDisplay = revision > 0 ? 'v' + revision : (desc.match(/revision\s+v?[\d.]+/i) || [''])[0] || '';
   els['chip-revision'].textContent = revDisplay || '—';
   els['chip-mac'].textContent = mac || '—';
-  els['chip-features'].textContent = Array.isArray(features) && features.length ? features.join(', ') : '—';
   els['chip-flash-size'].textContent = flashSize || '—';
   els['chip-info-card'].classList.remove('hidden');
 

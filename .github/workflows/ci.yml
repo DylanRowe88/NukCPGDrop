@@ -8,7 +8,6 @@ on:
 
 env:
   DOTNET_VERSION: 8.0.x
-  ESP_IDF_VERSION: v5.2
 
 jobs:
   ui-lint:
@@ -54,9 +53,9 @@ jobs:
         run: python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
 
       - name: Build ESP-IDF firmware
-        uses: espressif/esp-idf-github-action@v1
+        uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: ${{ env.ESP_IDF_VERSION }}
+          esp_idf_version: v5.2
           target: esp32s3
           path: firmware/
           command: idf.py build
