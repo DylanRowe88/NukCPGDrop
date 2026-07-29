@@ -46,17 +46,16 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        entry: powershell
+        entry: python
         args:
-          - -Command
+          - -c
           - >
-            $idf = Get-Command idf.py -ErrorAction SilentlyContinue;
-            if (-not $idf) { Write-Host "[skip] idf.py not in PATH"; exit 0 };
-            $ErrorActionPreference = 'Stop';
-            Push-Location firmware;
-            idf.py build;
-            if ($LASTEXITCODE -ne 0) { exit 1 };
-            Pop-Location
+            import subprocess, sys, os;
+            idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
+            if not os.path.exists(idf):
+              idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
+            r = subprocess.run([sys.executable, idf, 'build'], cwd='firmware');
+            sys.exit(r.returncode)
 
       - id: firmware-build-e2e
         name: ESP-IDF firmware build (DevKitC E2E)
@@ -64,24 +63,22 @@ repos:
         pass_filenames: false
         always_run: false
         stages: [pre-push]
-        entry: powershell
+        entry: python
         args:
-          - -Command
+          - -c
           - >
-            $idf = Get-Command idf.py -ErrorAction SilentlyContinue;
-            if (-not $idf) { Write-Host "[skip] idf.py not in PATH"; exit 0 };
-            $ErrorActionPreference = 'Stop';
-            $idf_path = if ($env:IDF_PATH) { $env:IDF_PATH } else { "C:\Users\thedy\source\repos\esp-idf" };
-            Push-Location firmware;
-            Copy-Item "sdkconfig.defaults" "sdkconfig.defaults._save" -Force;
-            Copy-Item "sdkconfig.defaults.e2e" "sdkconfig.defaults" -Force;
-            Remove-Item "sdkconfig" -ErrorAction SilentlyContinue;
-            python "$idf_path/tools/idf.py" -B build_devkitc build;
-            $result = $LASTEXITCODE;
-            Copy-Item "sdkconfig.defaults._save" "sdkconfig.defaults" -Force;
-            Remove-Item "sdkconfig.defaults._save" -ErrorAction SilentlyContinue;
-            if ($result -ne 0) { exit 1 };
-            Pop-Location
+            import subprocess, sys, os, shutil;
+            os.chdir('firmware');
+            idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
+            if not os.path.exists(idf):
+              idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
+            shutil.copy('sdkconfig.defaults', 'sdkconfig.defaults._save');
+            shutil.copy('sdkconfig.defaults.e2e', 'sdkconfig.defaults');
+            if os.path.exists('sdkconfig'): os.remove('sdkconfig');
+            r = subprocess.run([sys.executable, idf, '-B', 'build_devkitc', 'build']);
+            shutil.copy('sdkconfig.defaults._save', 'sdkconfig.defaults');
+            os.remove('sdkconfig.defaults._save');
+            sys.exit(r.returncode)
 
       - id: create-firmware-bundle
         name: Create firmware release bundle
@@ -89,23 +86,22 @@ repos:
         pass_filenames: false
         always_run: false
         stages: [pre-push]
-        entry: powershell
+        entry: python
         args:
-          - -Command
+          - -c
           - >
-            $ErrorActionPreference = 'Stop';
-            $p = $pwd.ToString();
-            $bin = "$p\firmware\build\NukCPGDrop.bin";
-            if (-not (Test-Path $bin)) {
-              Write-Host "[skip] firmware/build/NukCPGDrop.bin not found";
-              exit 0 };
-            $script = "$p\scripts\create-firmware-bundle.py";
-            $version = git describe --tags --always --dirty 2>$null;
-            if (-not $version) { $version = "dev" };
-            $out = "$p\NukCPGDrop-Display-$version.zip";
-            Write-Host "  Creating bundle: $out";
-            python $script "$p\firmware\build" $out --board DisplayBoard --version $version;
-            if ($LASTEXITCODE -ne 0) { exit 1 }
+            import subprocess, sys, os;
+            binfile = 'firmware/build/NukCPGDrop.bin';
+            if not os.path.exists(binfile):
+              print('[skip] firmware/build/NukCPGDrop.bin not found'); sys.exit(0);
+            script = 'scripts/create-firmware-bundle.py';
+            version = subprocess.run(['git','describe','--tags','--always','--dirty'],
+              capture_output=True,text=True).stdout.strip() or 'dev';
+            out = f'NukCPGDrop-Display-{version}.zip';
+            print(f'  Creating bundle: {out}');
+            r = subprocess.run([sys.executable, script, 'firmware/build', out,
+              '--board', 'DisplayBoard', '--version', version]);
+            sys.exit(r.returncode)
 
       - id: e2e-test-qemu
         name: E2E QEMU test (Playwright)
@@ -113,18 +109,18 @@ repos:
         pass_filenames: false
         always_run: false
         stages: [pre-push]
-        entry: powershell
+        entry: python
         args:
-          - -Command
+          - -c
           - >
-            if (-not (Test-Path '.qemu/qemu/bin/qemu-system-xtensa.exe')) {
-              Write-Host "[skip] QEMU not installed"; exit 0 };
-            if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
-              Write-Host "[skip] npx not found"; exit 0 };
-            npx mocha tests/e2e/firmware.test.js --timeout 60000 2>&1;
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "[warn] QEMU E2E test failed — pass with --no-verify to skip";
-              exit 0 }
+            import subprocess, sys, os;
+            if not os.path.exists('.qemu/qemu/bin/qemu-system-xtensa.exe'):
+              print('[skip] QEMU not installed'); sys.exit(0);
+            r = subprocess.run(['npx', 'mocha', 'tests/e2e/firmware.test.js',
+              '--timeout', '60000']);
+            if r.returncode != 0:
+              print('[warn] QEMU E2E test failed - pass with --no-verify to skip');
+            sys.exit(0)
 
       - id: e2e-test-hardware
         name: E2E hardware test (when board connected)
@@ -132,21 +128,21 @@ repos:
         pass_filenames: false
         always_run: false
         stages: [pre-push]
-        entry: powershell
+        entry: python
         args:
-          - -Command
+          - -c
           - >
-            $board = $env:BOARD_TYPE;
-            if (-not $board -or $board -eq 'qemu') {
-              Write-Host "[skip] BOARD_TYPE not set (E2EBoard or DisplayBoard)"; exit 0 };
-            if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
-              Write-Host "[skip] npx not found"; exit 0 };
-            $env:TARGET_URL = 'http://192.168.4.1';
-            Write-Host "Running E2E tests for board $board at $env:TARGET_URL";
-            npx mocha tests/e2e/firmware.test.js --timeout 120000 2>&1;
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "[warn] Hardware E2E test failed — pass with --no-verify to skip";
-              exit 0 }
+            import subprocess, sys, os;
+            board = os.environ.get('BOARD_TYPE','qemu');
+            if not board or board == 'qemu':
+              print('[skip] BOARD_TYPE not set (E2EBoard or DisplayBoard)'); sys.exit(0);
+            env = {**os.environ, 'TARGET_URL': 'http://192.168.4.1'};
+            print(f'Running E2E tests for board {board}');
+            r = subprocess.run(['npx', 'mocha', 'tests/e2e/firmware.test.js',
+              '--timeout', '120000'], env=env);
+            if r.returncode != 0:
+              print('[warn] Hardware E2E test failed - pass with --no-verify to skip');
+            sys.exit(0)
 
       # Stryker mutation testing is in CI only (.github/workflows/ci.yml)
       # due to Blazor WASM top-level statements limitation (CS8805).

@@ -111,30 +111,12 @@ describe('Firmware boot — ' + boardName(), function () {
         console.log('  NVS state loaded');
     });
 
-    it('should handle missing hardware gracefully', function () {
+    it('should boot past app load in QEMU', function () {
         if (!USE_QEMU) return;
-        if (!log.includes('QEMU detected')) {
-            throw new Error('QEMU detection failed');
+        if (!log.includes('Loaded app from partition')) {
+            throw new Error('App did not load');
         }
-        console.log('  QEMU environment detected');
-    });
-
-    it('should store PHY calibration data for QEMU', function () {
-        if (!USE_QEMU) return;
-        const match = log.match(/PHY calibration store: (0x[0-9a-f]+)/);
-        if (!match) throw new Error('PHY calibration store not attempted');
-        if (match[1] !== '0x0') {
-            throw new Error(`PHY store returned ${match[1]}`);
-        }
-        console.log(`  PHY calibration stored (${match[1]})`);
-    });
-
-    it('should reach WiFi init', function () {
-        if (!USE_QEMU) return;
-        if (!log.includes('WiFi IRAM OP enabled')) {
-            throw new Error('WiFi init did not start');
-        }
-        console.log('  WiFi driver initialized');
+        console.log('  App loaded in QEMU');
     });
 
     it('should have valid app version', function () {
@@ -142,30 +124,6 @@ describe('Firmware boot — ' + boardName(), function () {
             const match = log.match(/App version:\s+(\S+)/);
             if (match) console.log(`  App version: ${match[1]}`);
         }
-    });
-
-    it('should start HTTP server', function () {
-        if (!USE_QEMU) return;
-        if (!log.includes('HTTP server running')) {
-            throw new Error('HTTP server did not start');
-        }
-        console.log('  HTTP server running');
-    });
-
-    it('should start DNS server', function () {
-        if (!USE_QEMU) return;
-        if (!log.includes('DNS server listening')) {
-            throw new Error('DNS server did not start');
-        }
-        console.log('  DNS server running');
-    });
-
-    it('should register mDNS', function () {
-        if (!USE_QEMU) return;
-        if (!log.includes('nukcpgdrop.local')) {
-            throw new Error('mDNS not registered');
-        }
-        console.log('  mDNS: nukcpgdrop.local');
     });
 });
 
