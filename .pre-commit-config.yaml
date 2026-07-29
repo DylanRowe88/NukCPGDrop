@@ -94,16 +94,17 @@ repos:
           - -Command
           - >
             $ErrorActionPreference = 'Stop';
-            $bin = Join-Path $pwd "firmware" "build" "NukCPGDrop.bin";
+            $p = $pwd.ToString();
+            $bin = "$p\firmware\build\NukCPGDrop.bin";
             if (-not (Test-Path $bin)) {
               Write-Host "[skip] firmware/build/NukCPGDrop.bin not found";
               exit 0 };
-            $script = Join-Path $pwd "scripts" "create-firmware-bundle.py";
+            $script = "$p\scripts\create-firmware-bundle.py";
             $version = git describe --tags --always --dirty 2>$null;
             if (-not $version) { $version = "dev" };
-            $out = Join-Path $pwd "NukCPGDrop-Display-$version.zip";
+            $out = "$p\NukCPGDrop-Display-$version.zip";
             Write-Host "  Creating bundle: $out";
-            python $script (Join-Path $pwd "firmware" "build") $out --board DisplayBoard --version $version;
+            python $script "$p\firmware\build" $out --board DisplayBoard --version $version;
             if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - id: e2e-test-qemu

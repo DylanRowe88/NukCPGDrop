@@ -35,7 +35,7 @@ function createFlashImage() {
 
     exec(`python -m esptool --chip esp32s3 merge_bin `
         + `--output "${FLASH_BIN}" --flash_mode dio --flash_freq 80m `
-        + `--flash_size 8MB --fill-flash-size 8MB `
+        + `--flash_size 16MB --fill-flash-size 16MB `
         + `0x0 "${buildDir}/bootloader/bootloader.bin" `
         + `0x8000 "${buildDir}/partition_table/partition-table.bin" `
         + `0x9000 "${QEMU_DIR}/nvs_partition.bin" `
