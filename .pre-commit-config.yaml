@@ -90,7 +90,7 @@ repos:
         args:
           - -c
           - >
-            import subprocess, sys, os;
+            import subprocess, sys, os, shutil;
             binfile = 'firmware/build/NukCPGDrop.bin';
             if not os.path.exists(binfile):
               print('[skip] firmware/build/NukCPGDrop.bin not found'); sys.exit(0);
@@ -101,7 +101,17 @@ repos:
             print(f'  Creating bundle: {out}');
             r = subprocess.run([sys.executable, script, 'firmware/build', out,
               '--board', 'DisplayBoard', '--version', version]);
-            sys.exit(r.returncode)
+            if r.returncode != 0: sys.exit(r.returncode);
+            # Copy firmware files to docs/flash/firmware/ for CORS-free serving via GitHub Pages
+            os.makedirs('docs/flash/firmware', exist_ok=True);
+            paths = {'bootloader.bin':'bootloader/bootloader.bin','partition-table.bin':'partition_table/partition-table.bin',
+                     'NukCPGDrop.bin':'NukCPGDrop.bin','ota_data_initial.bin':'ota_data_initial.bin'};
+            for name, rel in paths.items():
+                src = f'firmware/build/{rel}';
+                if os.path.exists(src):
+                    shutil.copy2(src, f'docs/flash/firmware/{name}');
+                    print(f'  Copied {src} -> docs/flash/firmware/{name}');
+            sys.exit(0)
 
       - id: create-github-release
         name: Create GitHub release from local build

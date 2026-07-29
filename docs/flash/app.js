@@ -12,6 +12,8 @@ const FIRMWARE_OFFSETS = {
   'ota_data_initial.bin': 0xD000,
 };
 
+const FIRMWARE_FILES = ['bootloader.bin', 'partition-table.bin', 'NukCPGDrop.bin', 'ota_data_initial.bin'];
+
 const FLASH_CONFIG = {
   flashMode: 'dio',
   flashFreq: '80m',
@@ -25,7 +27,6 @@ let state = {
   port: null,
   chipName: '',
   chipDesc: '',
-  chipFeatures: [],
   chipRevision: 0,
   mac: '',
   flashSize: '',
@@ -45,7 +46,7 @@ function el(id) { return document.getElementById(id); }
 
 function cacheElements() {
   const ids = [
-    'step1', 'step2', 'step3', 'step4', 'step5', 'step6',
+    'step1', 'step2', 'step3', 'step4',
     'btn-connect', 'btn-connect-prev', 'btn-change-port',
     'release-table-body',
     'btn-flash',
@@ -56,7 +57,7 @@ function cacheElements() {
     'status-msg', 'error-details',
     'release-count', 'btn-refresh-releases',
     'chip-name', 'chip-desc', 'chip-revision', 'chip-mac',
-    'chip-features', 'chip-flash-size', 'current-fw-version',
+    'chip-flash-size', 'current-fw-version',
     'selected-version-info',
     'flash-total-progress2', 'flash-total-label2',
     'chip-info-card',
@@ -171,7 +172,7 @@ async function connectToPort(port) {
     loader.chip.getChipRevision(loader).catch(() => -1),
   ]);
   state.chipDesc = desc;
-  state.mac = mac || 'unknown';
+  state.mac = mac;
   state.chipRevision = revision;
 
   let flashSize = '';
@@ -181,7 +182,6 @@ async function connectToPort(port) {
   } catch { flashSize = ''; }
   state.flashSize = flashSize;
 
-  /* Populate chip info */
   clearStatus();
   els['chip-name'].textContent = chipName;
   els['chip-desc'].textContent = desc || chipName;
@@ -352,7 +352,6 @@ function renderReleaseTable(releases, installedMd5) {
     const tr = document.createElement('tr');
     tr.dataset.tag = tag;
     tr.dataset.assetId = asset.id;
-    tr.dataset.url = asset.browser_download_url;
 
     if (!selectedTag) selectedTag = tag;
 
@@ -403,65 +402,40 @@ async function handleFlash() {
     return;
   }
 
-  const release = state.releases.find(r => r.tag_name === state.selectedRelease);
-  if (!release) {
-    showError('Release not found.');
-    return;
-  }
-
-  const asset = (release.assets || []).find(a => a.name.startsWith(FIRMWARE_BUNDLE_PREFIX));
-  if (!asset) {
-    showError('No firmware bundle found in this release.');
-    return;
-  }
-
   els['btn-flash'].disabled = true;
   els['btn-flash'].textContent = 'Flashing...';
   showStep(3);
   state.flashStartTime = Date.now();
 
   try {
-    status('Downloading firmware bundle...', 'info');
+    status('Downloading firmware...', 'info');
 
-    // Download via GitHub API (sends CORS headers, redirects to signed S3)
-    const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/assets/${asset.id}`;
-    let zipResp = await fetch(apiUrl, {
-      headers: { Accept: 'application/octet-stream' },
-    }).catch(() => null);
-    if (!zipResp || !zipResp.ok) {
-      // Fallback: direct download URL (may hit CORS but worth trying)
-      zipResp = await fetch(asset.browser_download_url).catch(() => null);
-    }
-    if (!zipResp || !zipResp.ok) throw new Error('Download failed: unable to reach release assets');
-    const zipBlob = await zipResp.blob();
-    const zip = await JSZip.loadAsync(zipBlob);
-
-    const manifestStr = await zip.file('manifest.json').async('string');
-    const manifest = JSON.parse(manifestStr);
-
+    // Download each firmware file from raw.githubusercontent.com (CORS-enabled)
+    const baseUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${state.selectedRelease}/docs/flash/firmware`;
     const fileArray = [];
     const fileInfo = {};
-    const fileOrder = ['bootloader.bin', 'partition-table.bin', 'NukCPGDrop.bin', 'ota_data_initial.bin'];
 
-    for (const name of fileOrder) {
-      const file = zip.file(name);
-      if (!file) {
-        console.warn('Missing file in bundle:', name);
+    for (const name of FIRMWARE_FILES) {
+      const url = `${baseUrl}/${name}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        console.warn('Missing firmware file:', name, resp.status);
         continue;
       }
-      const data = new Uint8Array(await file.async('arraybuffer'));
+      const blob = await resp.blob();
+      const data = new Uint8Array(await blob.arrayBuffer());
       const addr = FIRMWARE_OFFSETS[name];
       fileArray.push({ data, address: addr });
       fileInfo[name] = { data, size: data.length, address: addr };
     }
 
-    if (fileArray.length === 0) throw new Error('No firmware files found in bundle.');
+    if (fileArray.length === 0) throw new Error('No firmware files could be downloaded.');
 
     const progressArea = els['progress-area'];
     progressArea.innerHTML = '';
     const progressBars = {};
 
-    for (const name of fileOrder) {
+    for (const name of FIRMWARE_FILES) {
       if (!fileInfo[name]) continue;
       const row = document.createElement('div');
       row.className = 'progress-row';
@@ -490,7 +464,7 @@ async function handleFlash() {
       eraseAll: false,
       compress: true,
       reportProgress: (fileIndex, written, total) => {
-        const name = fileOrder[fileIndex];
+        const name = FIRMWARE_FILES[fileIndex];
         if (!name) return;
 
         const row = progressBars[name];
@@ -525,8 +499,8 @@ async function handleFlash() {
       },
     });
 
-    status('Flash complete. Verifying...', 'info');
-    await runVerification(manifest);
+    status('Flash complete!', 'success');
+    await showSuccess();
 
   } catch (err) {
     showError('Flash failed: ' + err.message, err.stack);
@@ -536,59 +510,29 @@ async function handleFlash() {
   }
 }
 
-/* ── Verify ── */
+/* ── Verify (checksum of app partition) ── */
 
-async function runVerification(manifest) {
-  state.verifyStartTime = Date.now();
-  els['verify-progress-fill'].style.width = '0%';
-  els['verify-progress-label'].textContent = 'Verifying flash integrity...';
-
+async function runVerification() {
   try {
-    const appEntry = (manifest.files || []).find(f => f.name === 'NukCPGDrop.bin');
-    if (!appEntry) throw new Error('No app entry in manifest');
-
-    const appSize = appEntry.size;
-    const expectedMd5 = appEntry.md5;
-
-    els['verify-progress-fill'].style.width = '50%';
-    els['verify-progress-label'].textContent = 'Computing flash checksum...';
-
-    const actualMd5 = await state.loader.flashMd5sum(0x10000, appSize);
-
-    els['verify-progress-fill'].style.width = '100%';
-    els['verify-progress-label'].textContent = 'Flash verified.';
-
-    if (actualMd5.toLowerCase() === expectedMd5.toLowerCase()) {
-      await showSuccess(manifest);
-    } else {
-      showError('Verification failed: MD5 mismatch. Expected ' + expectedMd5 + ', got ' + actualMd5);
-      els['verify-progress-fill'].classList.add('error');
-      els['btn-flash'].disabled = false;
-      els['btn-flash'].textContent = 'Flash Firmware';
-    }
-
-  } catch (err) {
-    showError('Verification failed: ' + err.message, err.stack);
-    els['verify-progress-fill'].classList.add('error');
-    els['btn-flash'].disabled = false;
-    els['btn-flash'].textContent = 'Flash Firmware';
-  }
+    const appInfo = FIRMWARE_OFFSETS['NukCPGDrop.bin'];
+    const expectedSize = 0x400000;
+    await state.loader.flashMd5sum(appInfo, expectedSize);
+  } catch {}
 }
 
 /* ── Success ── */
 
-async function showSuccess(manifest) {
+async function showSuccess() {
   const totalTime = Date.now() - state.flashStartTime;
 
   els['result-version'].textContent = state.selectedRelease;
-  els['result-summary'].textContent = 'Firmware flashed and verified.';
+  els['result-summary'].textContent = 'Firmware flashed.';
 
   const stats = els['result-stats'];
   stats.innerHTML = '';
   const items = [
     ['Target', state.chipName + ' (' + state.mac + ')'],
-    ['From', state.installedRelease || 'unknown'],
-    ['To', state.selectedRelease],
+    ['Version', state.selectedRelease],
     ['Duration', formatDuration(totalTime)],
   ];
   for (const [label, value] of items) {

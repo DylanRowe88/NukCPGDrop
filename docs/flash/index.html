@@ -26,17 +26,17 @@
 </div>
 
 <div class="marquee-wrap">
-  <div class="marquee-track" aria-hidden="true">
+  <div class="marquee-track">
     <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
+    <span class="marquee-text">Rest when you're dead</span>
     <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
+    <span class="marquee-text">Rest when you're dead</span>
     <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
+    <span class="marquee-text">Rest when you're dead</span>
     <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
+    <span class="marquee-text">Rest when you're dead</span>
     <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
-    <img src="https://canonuks.com/cdn/shop/files/Nuks-possum-white.png?v=1760632665" alt="">
+    <span class="marquee-text">Rest when you're dead</span>
   </div>
 </div>
 
@@ -51,8 +51,8 @@
     <p style="margin-bottom:16px;font-size:0.875rem;color:#666;">
       Connect your NukCPGDrop ESP32-S3 via USB. Chrome or Edge required for WebSerial.
     </p>
+    <button id="btn-connect-prev" class="btn hidden"></button>
     <button id="btn-connect" class="btn btn-primary">Connect ESP32-S3</button>
-    <button id="btn-connect-prev" class="btn hidden" style="margin-top:8px;"></button>
   </div>
 
   <!-- Step 2: Device Info + Select Firmware (merged) -->
@@ -116,18 +116,9 @@
     </div>
   </div>
 
-  <!-- Step 4: Verify + Result (merged) -->
+  <!-- Step 4: Complete -->
   <div id="step4" class="step">
     <h2>Complete</h2>
-    <div class="progress-row">
-      <div class="progress-label">
-        <span>Flash Verification</span>
-        <span id="verify-progress-label">Checking...</span>
-      </div>
-      <div class="progress-bar">
-        <div id="verify-progress-fill" class="progress-fill" style="width:0%"></div>
-      </div>
-    </div>
     <div class="result-icon"></div>
     <div class="result-details">
       <h3 id="result-version">—</h3>

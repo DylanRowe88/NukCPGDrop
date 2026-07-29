@@ -41,13 +41,23 @@ body {
   display: flex;
   align-items: center;
   height: 100%;
-  animation: marquee 20s linear infinite;
+  animation: marquee 30s linear infinite;
   width: max-content;
 }
 .marquee-track img {
   height: 56px;
   width: auto;
-  margin: 0 40px;
+  margin: 0 24px;
+  flex-shrink: 0;
+}
+.marquee-text {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+  white-space: nowrap;
+  margin-right: 24px;
   flex-shrink: 0;
 }
 @keyframes marquee {

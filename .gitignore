@@ -29,3 +29,5 @@ ui/**/obj/
 tests/**/bin/
 tests/**/obj/
 firmware/.pio/
+
+docs/flash/firmware/*.bin
