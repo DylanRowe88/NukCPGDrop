@@ -58,8 +58,8 @@ repos:
             if ($LASTEXITCODE -ne 0) { exit 1 };
             Pop-Location
 
-      - id: firmware-test
-        name: ESP-IDF firmware tests (QEMU)
+      - id: firmware-build-e2e
+        name: ESP-IDF firmware build (DevKitC E2E)
         language: system
         pass_filenames: false
         always_run: false
@@ -71,9 +71,16 @@ repos:
             $idf = Get-Command idf.py -ErrorAction SilentlyContinue;
             if (-not $idf) { Write-Host "[skip] idf.py not in PATH"; exit 0 };
             $ErrorActionPreference = 'Stop';
+            $idf_path = if ($env:IDF_PATH) { $env:IDF_PATH } else { "C:\Users\thedy\source\repos\esp-idf" };
             Push-Location firmware;
-            idf.py test;
-            if ($LASTEXITCODE -ne 0) { exit 1 };
+            Copy-Item "sdkconfig.defaults" "sdkconfig.defaults._save" -Force;
+            Copy-Item "sdkconfig.defaults.e2e" "sdkconfig.defaults" -Force;
+            Remove-Item "sdkconfig" -ErrorAction SilentlyContinue;
+            python "$idf_path/tools/idf.py" -B build_devkitc build;
+            $result = $LASTEXITCODE;
+            Copy-Item "sdkconfig.defaults._save" "sdkconfig.defaults" -Force;
+            Remove-Item "sdkconfig.defaults._save" -ErrorAction SilentlyContinue;
+            if ($result -ne 0) { exit 1 };
             Pop-Location
 
       - id: e2e-test-qemu

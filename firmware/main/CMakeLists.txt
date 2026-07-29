@@ -26,4 +26,7 @@ idf_component_register(
         lvgl_porting
         dashboard_ui
         i2c_shared
+        sdmmc
+        vfs
+        fatfs
 )

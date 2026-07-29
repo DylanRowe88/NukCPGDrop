@@ -1,19 +1,25 @@
 #include "web_server.h"
 #include "cJSON.h"
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "led.h"
 #include "pca9685.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdmmc_host.h"
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"
 #include "web_server.h"
 #include "wifi_manager.h"
+#include "driver/i2s_std.h"
+#include <math.h>
 #include <string.h>
 
 static const char *TAG = "web";
@@ -299,6 +305,139 @@ static esp_err_t asset_handler(httpd_req_t *req) {
   return ESP_FAIL;
 }
 
+// ── Hardware test handlers ────────────────────────────────────────
+
+static esp_err_t api_test_audio_handler(httpd_req_t *req) {
+  cJSON *root = cJSON_CreateObject();
+  const char *json = NULL;
+#if CONFIG_BOARD_DISPLAY
+  int sample_rate = 16000;
+  int duration_ms = 1000;
+  int num_samples = sample_rate * duration_ms / 1000;
+  bool test_ok = false;
+
+  int16_t *sine = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+  int16_t *recv_buf = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+
+  if (sine && recv_buf) {
+    for (int i = 0; i < num_samples; i++)
+      sine[i] = (int16_t)(3000 * sinf(2 * 3.14159f * 1000 * i / sample_rate));
+
+    i2s_chan_handle_t tx_h, rx_h;
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    i2s_std_config_t std_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate),
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .gpio_cfg = {.mclk = 4, .bclk = 5, .ws = 7, .dout = 8, .din = 6},
+    };
+
+    if (i2s_new_channel(&chan_cfg, &tx_h, &rx_h) == ESP_OK &&
+        i2s_channel_init_std_mode(tx_h, &std_cfg) == ESP_OK &&
+        i2s_channel_enable(tx_h) == ESP_OK &&
+        i2s_channel_enable(rx_h) == ESP_OK) {
+
+      size_t written = 0, read = 0;
+      i2s_channel_write(tx_h, sine, num_samples * sizeof(int16_t), &written, pdMS_TO_TICKS(2000));
+      vTaskDelay(pdMS_TO_TICKS(200));
+      i2s_channel_read(rx_h, recv_buf, num_samples * sizeof(int16_t), &read, pdMS_TO_TICKS(2000));
+
+      i2s_channel_disable(tx_h);
+      i2s_del_channel(tx_h);
+      i2s_channel_disable(rx_h);
+      i2s_del_channel(rx_h);
+
+      float energy = 0;
+      int peak = 0;
+      for (int i = 0; i < (read / 2); i++) {
+        int v = abs(recv_buf[i]);
+        energy += v * v;
+        if (v > peak) peak = v;
+      }
+
+      cJSON_AddNumberToObject(root, "samples_written", written / 2);
+      cJSON_AddNumberToObject(root, "samples_read", read / 2);
+      cJSON_AddNumberToObject(root, "peak_amplitude", peak);
+      cJSON_AddNumberToObject(root, "energy", (double)(energy / (read / 2 + 1)));
+      cJSON_AddBoolToObject(root, "mic_detected", peak > 100);
+      test_ok = true;
+    } else {
+      cJSON_AddStringToObject(root, "message", "I2S init failed");
+    }
+  } else {
+    cJSON_AddStringToObject(root, "message", "OOM");
+  }
+
+  free(sine);
+  free(recv_buf);
+  cJSON_AddStringToObject(root, "status", test_ok ? "ok" : "error");
+#else
+  cJSON_AddStringToObject(root, "status", "skip");
+  cJSON_AddStringToObject(root, "message", "No audio hardware");
+#endif
+
+  json = cJSON_Print(root);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, json);
+  free((void *)json);
+  cJSON_Delete(root);
+  return ESP_OK;
+}
+
+static esp_err_t api_test_sdcard_handler(httpd_req_t *req) {
+  cJSON *root = cJSON_CreateObject();
+#if CONFIG_BOARD_DISPLAY
+  const char mount_point[] = "/sdcard";
+  sdmmc_card_t *card = NULL;
+  esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+      .format_if_mount_failed = false,
+      .max_files = 5,
+      .allocation_unit_size = 16 * 1024,
+  };
+
+  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+  sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+  slot_config.width = 4;
+
+  esp_err_t ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+  if (ret == ESP_OK) {
+    sdmmc_card_print_info(stdout, card);
+    cJSON_AddNumberToObject(root, "size_mb", (double)(card->csd.capacity * card->csd.sector_size / (1024 * 1024)));
+
+    FILE *f = fopen("/sdcard/test.txt", "w");
+    if (f) {
+      fprintf(f, "NukCPGDrop SD test OK\n");
+      fclose(f);
+      cJSON_AddStringToObject(root, "write", "ok");
+    } else {
+      cJSON_AddStringToObject(root, "write", "fail");
+    }
+
+    f = fopen("/sdcard/test.txt", "r");
+    if (f) {
+      char buf[64];
+      if (fgets(buf, sizeof(buf), f)) cJSON_AddStringToObject(root, "read", buf);
+      fclose(f);
+    }
+    remove("/sdcard/test.txt");
+    cJSON_AddStringToObject(root, "status", "ok");
+    esp_vfs_fat_sdcard_unmount(mount_point, card);
+  } else {
+    cJSON_AddStringToObject(root, "status", "error");
+    cJSON_AddStringToObject(root, "message", esp_err_to_name(ret));
+  }
+#else
+  cJSON_AddStringToObject(root, "status", "skip");
+  cJSON_AddStringToObject(root, "message", "No SDMMC hardware");
+#endif
+
+  const char *json = cJSON_Print(root);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, json);
+  free((void *)json);
+  cJSON_Delete(root);
+  return ESP_OK;
+}
+
 // ── URI registration ─────────────────────────────────────────────
 
 static const httpd_uri_t api_uris[] = {
@@ -307,6 +446,8 @@ static const httpd_uri_t api_uris[] = {
     {.uri = "/api/hold", .method = HTTP_POST, .handler = api_hold_handler},
     {.uri = "/api/reset", .method = HTTP_POST, .handler = api_reset_handler},
     {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_handler},
+    {.uri = "/api/test/audio", .method = HTTP_POST, .handler = api_test_audio_handler},
+    {.uri = "/api/test/sdcard", .method = HTTP_POST, .handler = api_test_sdcard_handler},
 };
 
 esp_err_t web_server_start(void) {
