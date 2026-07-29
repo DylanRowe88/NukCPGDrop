@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NukCPGDrop Firmware Flasher</title>
 <meta name="description" content="Flash NukCPGDrop firmware to your ESP32-S3 via WebSerial.">
+<link rel="icon" type="image/png" href="https://canonuks.com/cdn/shop/files/Untitled_design.png?height=32&v=1760624522">
 <link rel="stylesheet" href="style.css">
 
 <script type="importmap">
@@ -51,13 +52,14 @@
       Connect your NukCPGDrop ESP32-S3 via USB. Chrome or Edge required for WebSerial.
     </p>
     <button id="btn-connect" class="btn btn-primary">Connect ESP32-S3</button>
+    <button id="btn-connect-prev" class="btn hidden" style="margin-top:8px;"></button>
   </div>
 
-  <!-- Step 2: Device Info -->
+  <!-- Step 2: Device Info + Select Firmware (merged) -->
   <div id="step2" class="step">
-    <h2>Device Info</h2>
+    <h2>Device &amp; Firmware</h2>
 
-    <div class="info-card" id="chip-info">
+    <div id="chip-info-card" class="info-card hidden">
       <dl>
         <dt>Chip</dt>
         <dd id="chip-name">—</dd>
@@ -74,16 +76,10 @@
         <dt>Current Firmware</dt>
         <dd id="current-fw-version">Checking...</dd>
       </dl>
+      <button id="btn-change-port" class="btn hidden" style="margin-top:8px;">Change Device</button>
     </div>
 
-    <button id="btn-refresh-releases" class="btn" style="margin-top:4px;">Refresh Releases</button>
-  </div>
-
-  <!-- Step 3: Select Firmware -->
-  <div id="step3" class="step">
-    <h2>Select Firmware</h2>
-
-    <p style="font-size:0.8125rem;color:#666;margin-bottom:12px;">
+    <p style="font-size:0.8125rem;color:#666;margin:12px 0;">
       <span id="release-count">Loading releases...</span>
       &ensp;|&ensp;
       <span id="selected-version-info">Select a version below.</span>
@@ -103,23 +99,12 @@
       </tbody>
     </table>
 
+    <button id="btn-refresh-releases" class="btn" style="margin-top:4px;">Refresh Releases</button>
     <button id="btn-flash" class="btn btn-primary">Flash Firmware</button>
-
-    <div id="flash-total" class="mt-20" style="display:none;">
-      <div class="progress-row">
-        <div class="progress-label">
-          <span>Total Progress</span>
-          <span id="flash-total-label">0%</span>
-        </div>
-        <div class="progress-bar">
-          <div id="flash-total-progress" class="progress-fill" style="width:0%"></div>
-        </div>
-      </div>
-    </div>
   </div>
 
-  <!-- Step 4: Flashing -->
-  <div id="step4" class="step">
+  <!-- Step 3: Flashing -->
+  <div id="step3" class="step">
     <h2>Flashing</h2>
     <div class="progress-group" id="progress-area"></div>
     <div class="progress-row">
@@ -133,9 +118,9 @@
     </div>
   </div>
 
-  <!-- Step 5: Verify -->
-  <div id="step5" class="step">
-    <h2>Verifying</h2>
+  <!-- Step 4: Verify + Result (merged) -->
+  <div id="step4" class="step">
+    <h2>Complete</h2>
     <div class="progress-row">
       <div class="progress-label">
         <span>Flash Verification</span>
@@ -145,11 +130,6 @@
         <div id="verify-progress-fill" class="progress-fill" style="width:0%"></div>
       </div>
     </div>
-  </div>
-
-  <!-- Step 6: Result -->
-  <div id="step6" class="step">
-    <h2>Complete</h2>
     <div class="result-icon"></div>
     <div class="result-details">
       <h3 id="result-version">—</h3>

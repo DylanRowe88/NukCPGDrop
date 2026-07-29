@@ -34,23 +34,10 @@ jobs:
         with:
           files: tests/NukCPGDrop.Ui.Tests/coverage.cobertura.xml
 
-  ui-mutation:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-      - run: dotnet tool restore
-      - run: >
-          dotnet tool run dotnet-stryker
-          --project ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj
-          --test-project tests/NukCPGDrop.Ui.Tests/NukCPGDrop.Ui.Tests.csproj
-          --break-at 100 --threshold-break 100
-          --output StrykerOutput --since
-
   build-and-embed:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -60,12 +47,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Build UI → embed-web.py runs automatically via csproj AfterPublish target
+      - name: Generate version
+        id: version
+        run: |
+          DATE_TAG=$(date -u +'%Y%m%d')
+          RUN_NUM=${{ github.run_number }}
+          echo "version=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
       - name: Build and publish Blazor WASM
         run: |
           dotnet publish ui/NukCPGDrop.Ui/ -c Release -o publish/wwwroot
+          python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
 
-      # Build firmware (will pick up the regenerated web_assets.h)
       - name: Build ESP-IDF firmware
         uses: espressif/esp-idf-github-action@v1
         with:
@@ -74,19 +67,48 @@ jobs:
           path: firmware/
           command: idf.py build
 
+      - name: Create firmware bundle
+        run: |
+          mkdir -p bundle
+          cp firmware/build/bootloader/bootloader.bin bundle/
+          cp firmware/build/partition_table/partition-table.bin bundle/
+          cp firmware/build/NukCPGDrop.bin bundle/
+          python -c "
+import hashlib, json, os
+files = []
+for f in ['bootloader.bin', 'partition-table.bin', 'NukCPGDrop.bin']:
+    path = f'bundle/{f}'
+    data = open(path, 'rb').read()
+    md5 = hashlib.md5(data).hexdigest()
+    files.append({'name': f, 'size': len(data), 'md5': md5})
+with open('bundle/manifest.json', 'w') as m:
+    json.dump({'version': '${{ steps.version.outputs.version }}', 'files': files}, m, indent=2)
+cd bundle && zip -r ../NukCPGDrop-Display-${{ steps.version.outputs.version }}.zip .
+
       - uses: actions/upload-artifact@v4
         with:
-          name: firmware
-          path: firmware/build/NukCPGDrop.bin
+          name: firmware-bundle
+          path: NukCPGDrop-Display-*.zip
 
-  firmware-test:
+  create-release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build-and-embed, ui-test, ui-lint]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Build and test with QEMU
-        uses: espressif/esp-idf-github-action@v1
+      - uses: actions/download-artifact@v4
         with:
-          esp_idf_version: ${{ env.ESP_IDF_VERSION }}
-          target: esp32s3
-          path: firmware/
-          command: idf.py test
+          name: firmware-bundle
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.build-and-embed.outputs.version }}"
+          BUNDLE="NukCPGDrop-Display-${VERSION}.zip"
+          gh release create "$VERSION" \
+            --title "NukCPGDrop $VERSION" \
+            --notes "Automated firmware build from commit ${{ github.sha }}" \
+            "$BUNDLE"

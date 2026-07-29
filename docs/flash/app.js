@@ -35,6 +35,7 @@ let state = {
   installedRelease: null,
   flashStartTime: 0,
   verifyStartTime: 0,
+  prevPorts: [],
 };
 
 const steps = document.querySelectorAll('.step');
@@ -45,7 +46,8 @@ function el(id) { return document.getElementById(id); }
 function cacheElements() {
   const ids = [
     'step1', 'step2', 'step3', 'step4', 'step5', 'step6',
-    'btn-connect', 'release-table-body',
+    'btn-connect', 'btn-connect-prev', 'btn-change-port',
+    'release-table-body',
     'btn-flash',
     'progress-area',
     'verify-progress-fill', 'verify-progress-label',
@@ -55,8 +57,9 @@ function cacheElements() {
     'release-count', 'btn-refresh-releases',
     'chip-name', 'chip-desc', 'chip-revision', 'chip-mac',
     'chip-features', 'chip-flash-size', 'current-fw-version',
-    'selected-version-info',     'flash-total-progress2',
-    'flash-total-label2',
+    'selected-version-info',
+    'flash-total-progress2', 'flash-total-label2',
+    'chip-info-card',
   ];
   ids.forEach(id => { els[id] = el(id); });
 }
@@ -112,7 +115,7 @@ function formatDuration(ms) {
   return m + 'm ' + (s % 60) + 's';
 }
 
-/* ── Step 1: Connect ── */
+/* ── Port / Connect ── */
 
 const PORT_FILTERS = [
   { usbVendorId: 0x303A },  /* Espressif */
@@ -121,10 +124,74 @@ const PORT_FILTERS = [
   { usbVendorId: 0x0403 },  /* FTDI */
 ];
 
-async function handleConnect() {
+async function connectToPort(port) {
   clearStatus();
   clearError();
 
+  state.port = port;
+  const transport = new Transport(port, true);
+  state.transport = transport;
+
+  const loader = new ESPLoader({
+    transport,
+    baudrate: 115200,
+    terminal: {
+      clean: () => {},
+      writeLine: () => {},
+      write: () => {},
+    },
+  });
+  state.loader = loader;
+
+  status('Detecting chip...', 'info');
+  const chipName = await loader.main();
+  state.chipName = chipName;
+
+  if (!chipName.toLowerCase().includes('esp32')) {
+    await disconnect();
+    showError('Unsupported chip: ' + chipName + '. ESP32-S3 required.');
+    return;
+  }
+
+  const [desc, features, mac, revision] = await Promise.all([
+    loader.chip.getChipDescription(loader).catch(() => ''),
+    loader.chip.getChipFeatures(loader).catch(() => []),
+    loader.chip.readMac(loader).catch(() => ''),
+    loader.chip.getChipRevision(loader).catch(() => 0),
+  ]);
+  state.chipDesc = desc;
+  state.chipFeatures = features;
+  state.mac = mac;
+  state.chipRevision = revision;
+
+  let flashSize = '';
+  try {
+    const fs = await loader.detectFlashSize();
+    flashSize = String(fs || '');
+  } catch { flashSize = ''; }
+  state.flashSize = flashSize;
+
+  /* Populate chip info */
+  els['chip-name'].textContent = chipName;
+  els['chip-desc'].textContent = desc || chipName;
+  els['chip-revision'].textContent = 'v' + revision;
+  els['chip-mac'].textContent = mac;
+  els['chip-features'].textContent = features.join(', ') || '—';
+  els['chip-flash-size'].textContent = flashSize || '—';
+  els['chip-info-card'].classList.remove('hidden');
+
+  els['btn-connect'].textContent = 'Connected';
+  els['btn-connect'].disabled = false;
+  els['btn-connect-prev'].classList.add('hidden');
+  els['btn-change-port'].classList.remove('hidden');
+
+  showStep(2);
+  els['current-fw-version'].textContent = 'Checking...';
+
+  await fetchReleases(true);
+}
+
+async function handleConnect() {
   if (!navigator.serial) {
     showError('WebSerial not supported. Open this page in Chrome or Edge version 89+.');
     return;
@@ -135,69 +202,7 @@ async function handleConnect() {
 
   try {
     const port = await navigator.serial.requestPort({ filters: PORT_FILTERS });
-    state.port = port;
-
-    // Transport auto-opens the port (don't call port.open() separately)
-    const transport = new Transport(port, true);
-    state.transport = transport;
-
-    const loader = new ESPLoader({
-      transport,
-      baudrate: 115200,
-      terminal: {
-        clean: () => {},
-        writeLine: () => {},
-        write: () => {},
-      },
-    });
-    state.loader = loader;
-
-    status('Detecting chip...', 'info');
-    const chipName = await loader.main();
-    state.chipName = chipName;
-
-    if (!chipName.toLowerCase().includes('esp32')) {
-      await disconnect();
-      showError('Unsupported chip: ' + chipName + '. ESP32-S3 required.');
-      return;
-    }
-
-    const [desc, features, mac, revision] = await Promise.all([
-      loader.chip.getChipDescription(loader).catch(() => ''),
-      loader.chip.getChipFeatures(loader).catch(() => []),
-      loader.chip.readMac(loader).catch(() => ''),
-      loader.chip.getChipRevision(loader).catch(() => 0),
-    ]);
-    state.chipDesc = desc;
-    state.chipFeatures = features;
-    state.mac = mac;
-    state.chipRevision = revision;
-
-    let flashSize = '';
-    try {
-      const fs = await loader.detectFlashSize();
-      flashSize = String(fs || '');
-    } catch { flashSize = ''; }
-    state.flashSize = flashSize;
-
-    /* Show chip info */
-    els['chip-name'].textContent = chipName;
-    els['chip-desc'].textContent = desc || chipName;
-    els['chip-revision'].textContent = 'v' + revision;
-    els['chip-mac'].textContent = mac;
-    els['chip-features'].textContent = features.join(', ') || '—';
-    els['chip-flash-size'].textContent = flashSize || '—';
-
-    /* Try to detect current firmware */
-    els['current-fw-version'].textContent = 'Checking...';
-    showStep(2);
-    els['btn-connect'].textContent = 'Connected';
-    els['btn-connect'].disabled = false;
-
-    /* Auto-fetch releases and detect installed version */
-    await fetchReleases(true);
-    showStep(3);
-
+    await connectToPort(port);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'NotFoundError') {
       status('No port selected.', 'info');
@@ -206,6 +211,32 @@ async function handleConnect() {
     }
     els['btn-connect'].textContent = 'Connect ESP32-S3';
     els['btn-connect'].disabled = false;
+  }
+}
+
+async function handleReconnect() {
+  if (state.prevPorts.length === 0) return;
+  const port = state.prevPorts[0];
+  els['btn-connect-prev'].disabled = true;
+  els['btn-connect-prev'].textContent = 'Reconnecting...';
+  try {
+    await connectToPort(port);
+  } catch (err) {
+    showError('Reconnect failed: ' + err.message, err.stack);
+    els['btn-connect-prev'].textContent = 'Reconnect';
+    els['btn-connect-prev'].disabled = false;
+  }
+}
+
+async function handleChangePort() {
+  try {
+    const port = await navigator.serial.requestPort({ filters: PORT_FILTERS });
+    await disconnect();
+    await connectToPort(port);
+  } catch (err) {
+    if (!(err instanceof DOMException && err.name === 'NotFoundError')) {
+      showError('Port change failed: ' + err.message);
+    }
   }
 }
 
@@ -221,7 +252,23 @@ async function disconnect() {
   state.port = null;
 }
 
-/* ── Step 2 → 3: Fetch Releases ── */
+/* ── Auto-detect previous ports ── */
+
+async function checkPreviousPorts() {
+  if (!navigator.serial) return;
+  try {
+    const ports = await navigator.serial.getPorts();
+    state.prevPorts = ports;
+    if (ports.length > 0) {
+      const info = ports[0].getInfo();
+      const label = info.usbVendorId === 0x303A ? 'ESP32-S3' : `USB device (${info.usbVendorId.toString(16).padStart(4, '0')})`;
+      els['btn-connect-prev'].textContent = `Reconnect ${label}`;
+      els['btn-connect-prev'].classList.remove('hidden');
+    }
+  } catch {}
+}
+
+/* ── Fetch Releases ── */
 
 async function fetchReleases(detectInstalled) {
   els['release-table-body'].innerHTML = '<tr><td colspan="4" style="color:#999;text-align:center;padding:20px;">Loading releases...</td></tr>';
@@ -239,12 +286,11 @@ async function fetchReleases(detectInstalled) {
 
     els['release-count'].textContent = releases.length + ' release(s)';
 
-    /* If detecting installed firmware, compute MD5 of app partition */
     let installedMd5 = null;
     if (detectInstalled && state.loader) {
       try {
         status('Reading current firmware signature...', 'info');
-        const appSize = 0x400000; /* 4MB — covers most firmware sizes */
+        const appSize = 0x400000;
         installedMd5 = await state.loader.flashMd5sum(0x10000, appSize);
       } catch {
         installedMd5 = null;
@@ -263,7 +309,6 @@ function renderReleaseTable(releases, installedMd5) {
   const tbody = els['release-table-body'];
   tbody.innerHTML = '';
 
-  /* Build a map of release tag → firmware asset */
   const assetMap = {};
   for (const rel of releases) {
     const asset = (rel.assets || []).find(a => a.name.startsWith(FIRMWARE_BUNDLE_PREFIX) && a.name.endsWith('.zip'));
@@ -273,7 +318,6 @@ function renderReleaseTable(releases, installedMd5) {
   }
 
   const sortedTags = Object.keys(assetMap).sort((a, b) => {
-    /* Simple semver sort */
     const va = a.replace(/^v/, '').split('.').map(Number);
     const vb = b.replace(/^v/, '').split('.').map(Number);
     for (let i = 0; i < Math.max(va.length, vb.length); i++) {
@@ -292,9 +336,6 @@ function renderReleaseTable(releases, installedMd5) {
     tr.dataset.tag = tag;
     tr.dataset.url = asset.browser_download_url;
 
-    /* Check if this matches installed firmware */
-    /* We'd need to download and extract manifest.json to compare, which is expensive.
-       Instead, we'll just select the latest release by default. */
     if (!selectedTag) selectedTag = tag;
 
     tr.innerHTML = `
@@ -308,7 +349,6 @@ function renderReleaseTable(releases, installedMd5) {
     tbody.appendChild(tr);
   }
 
-  /* Pre-select latest */
   state.selectedRelease = selectedTag;
   const rows = tbody.querySelectorAll('tr');
   for (const row of rows) {
@@ -334,7 +374,7 @@ function updateSelectedVersionInfo() {
   }
 }
 
-/* ── Step 4: Flash ── */
+/* ── Flash ── */
 
 async function handleFlash() {
   clearStatus();
@@ -359,19 +399,17 @@ async function handleFlash() {
 
   els['btn-flash'].disabled = true;
   els['btn-flash'].textContent = 'Flashing...';
-  showStep(4);
+  showStep(3);
   state.flashStartTime = Date.now();
 
   try {
     status('Downloading firmware bundle...', 'info');
 
-    /* Download and extract the zip */
     const zipResp = await fetch(asset.browser_download_url);
     if (!zipResp.ok) throw new Error('Download failed: HTTP ' + zipResp.status);
     const zipBlob = await zipResp.blob();
     const zip = await JSZip.loadAsync(zipBlob);
 
-    /* Read manifest */
     const manifestStr = await zip.file('manifest.json').async('string');
     const manifest = JSON.parse(manifestStr);
 
@@ -393,7 +431,6 @@ async function handleFlash() {
 
     if (fileArray.length === 0) throw new Error('No firmware files found in bundle.');
 
-    /* Initialize progress bars */
     const progressArea = els['progress-area'];
     progressArea.innerHTML = '';
     const progressBars = {};
@@ -414,7 +451,6 @@ async function handleFlash() {
       progressBars[name] = row;
     }
 
-    /* Total progress */
     const totalSize = fileArray.reduce((s, f) => s + f.data.length, 0);
     let totalWritten = 0;
 
@@ -428,7 +464,6 @@ async function handleFlash() {
       eraseAll: false,
       compress: true,
       reportProgress: (fileIndex, written, total) => {
-        const f = fileArray[fileIndex];
         const name = fileOrder[fileIndex];
         if (!name) return;
 
@@ -451,7 +486,6 @@ async function handleFlash() {
           }
         }
 
-        /* Track total written across files */
         if (fileIndex > 0) {
           const prevTotal = fileArray.slice(0, fileIndex).reduce((s, ff) => s + ff.data.length, 0);
           totalWritten = prevTotal + written;
@@ -472,11 +506,11 @@ async function handleFlash() {
     showError('Flash failed: ' + err.message, err.stack);
     els['btn-flash'].disabled = false;
     els['btn-flash'].textContent = 'Flash Firmware';
-    showStep(3);
+    showStep(2);
   }
 }
 
-/* ── Step 5: Verify ── */
+/* ── Verify ── */
 
 async function runVerification(manifest) {
   state.verifyStartTime = Date.now();
@@ -515,7 +549,7 @@ async function runVerification(manifest) {
   }
 }
 
-/* ── Step 6: Result ── */
+/* ── Success ── */
 
 async function showSuccess(manifest) {
   const totalTime = Date.now() - state.flashStartTime;
@@ -535,7 +569,7 @@ async function showSuccess(manifest) {
     stats.innerHTML += `<dt>${label}</dt><dd>${value}</dd>`;
   }
 
-  showStep(6);
+  showStep(4);
 
   try {
     await state.loader.after('hard_reset');
@@ -549,23 +583,30 @@ async function showSuccess(manifest) {
   state.port = null;
 }
 
-/* ── UI Event Wiring ── */
+/* ── UI Wiring ── */
 
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
 
   els['btn-connect'].addEventListener('click', handleConnect);
+  els['btn-connect-prev'].addEventListener('click', handleReconnect);
+  els['btn-change-port'].addEventListener('click', handleChangePort);
   els['btn-flash'].addEventListener('click', handleFlash);
   els['btn-refresh-releases'].addEventListener('click', () => fetchReleases(false));
   els['result-btn-again'].addEventListener('click', () => {
     showStep(1);
     els['btn-connect'].textContent = 'Connect ESP32-S3';
     els['btn-connect'].disabled = false;
+    els['chip-info-card'].classList.add('hidden');
+    els['btn-connect-prev'].classList.add('hidden');
+    els['btn-change-port'].classList.add('hidden');
+    checkPreviousPorts();
   });
 
-  /* Check if WebSerial is available */
   if (!navigator.serial) {
     showError('WebSerial is not supported by this browser. Open in Chrome or Edge.');
     els['btn-connect'].disabled = true;
   }
+
+  checkPreviousPorts();
 });
