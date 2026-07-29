@@ -1,0 +1,2 @@
+C:\Users\thedy\source\repos\NukCPGDrop\publish\wwwroot\emcc-props.json
+C:\Users\thedy\source\repos\NukCPGDrop\publish\wwwroot\web.config

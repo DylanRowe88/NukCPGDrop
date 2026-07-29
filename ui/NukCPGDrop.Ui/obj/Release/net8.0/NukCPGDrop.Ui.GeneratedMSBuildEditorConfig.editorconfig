@@ -1,0 +1,76 @@
+is_global = true
+build_property.EnableAotAnalyzer = 
+build_property.EnableSingleFileAnalyzer = 
+build_property.EnableTrimAnalyzer = false
+build_property.IncludeAllContentForSelfExtract = 
+build_property.TargetFramework = net8.0
+build_property.TargetFrameworkIdentifier = .NETCoreApp
+build_property.TargetFrameworkVersion = v8.0
+build_property.TargetPlatformMinVersion = 
+build_property.UsingMicrosoftNETSdkWeb = 
+build_property.ProjectTypeGuids = 
+build_property.InvariantGlobalization = true
+build_property.PlatformNeutralAssembly = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property.EntryPointFilePath = 
+build_property._SupportedPlatformList = browser
+build_property.RootNamespace = NukCPGDrop.Ui
+build_property.RootNamespace = NukCPGDrop.Ui
+build_property.ProjectDir = C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = false
+build_property.RazorLangVersion = 8.0
+build_property.SupportLocalizedComponentNames = 
+build_property.GenerateRazorMetadataSourceChecksumAttributes = 
+build_property.MSBuildProjectDirectory = C:\Users\thedy\source\repos\NukCPGDrop\ui\NukCPGDrop.Ui
+build_property._RazorSourceGeneratorDebug = 
+build_property.EffectiveAnalysisLevelStyle = 10.0
+build_property.EnableCodeStyleSeverity = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/App.razor]
+build_metadata.AdditionalFiles.TargetPath = QXBwLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Components/DifficultySelector.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xEaWZmaWN1bHR5U2VsZWN0b3IucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Components/DropButton.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xEcm9wQnV0dG9uLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Components/DropStatus.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xEcm9wU3RhdHVzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Components/LogoDisplay.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMb2dvRGlzcGxheS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Components/RangeSlider.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xSYW5nZVNsaWRlci5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Components/WifiIcon.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xXaWZpSWNvbi5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/MainLayout.razor]
+build_metadata.AdditionalFiles.TargetPath = TWFpbkxheW91dC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Pages/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcRGFzaGJvYXJkLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Pages/Debug.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcRGVidWcucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/Pages/Index.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSW5kZXgucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/thedy/source/repos/NukCPGDrop/ui/NukCPGDrop.Ui/_Imports.razor]
+build_metadata.AdditionalFiles.TargetPath = X0ltcG9ydHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
