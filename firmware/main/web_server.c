@@ -105,6 +105,21 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(root, "custom_interval", g_state.custom_interval);
   cJSON_AddNumberToObject(root, "range_min", g_state.range_min);
   cJSON_AddNumberToObject(root, "range_max", g_state.range_max);
+  cJSON_AddBoolToObject(root, "sound_enabled", g_state.sound_enabled);
+
+  cJSON *sv_cfg = cJSON_CreateObject();
+  cJSON *sv_dir_arr = cJSON_CreateArray();
+  cJSON *sv_min_arr = cJSON_CreateArray();
+  cJSON *sv_max_arr = cJSON_CreateArray();
+  for (int i = 0; i < 6; i++) {
+    cJSON_AddItemToArray(sv_dir_arr, cJSON_CreateBool(g_state.servo_dir[i]));
+    cJSON_AddItemToArray(sv_min_arr, cJSON_CreateNumber(g_state.sv_min[i]));
+    cJSON_AddItemToArray(sv_max_arr, cJSON_CreateNumber(g_state.sv_max[i]));
+  }
+  cJSON_AddItemToObject(sv_cfg, "dir", sv_dir_arr);
+  cJSON_AddItemToObject(sv_cfg, "min", sv_min_arr);
+  cJSON_AddItemToObject(sv_cfg, "max", sv_max_arr);
+  cJSON_AddItemToObject(root, "servos", sv_cfg);
 
   led_color_t lc;
   led_get_color(&lc);
@@ -239,10 +254,100 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
   if (cJSON_IsNumber(rmax))
     g_state.range_max = (uint32_t)rmax->valuedouble;
 
+  cJSON *sound = cJSON_GetObjectItem(json, "sound_enabled");
+  if (cJSON_IsBool(sound))
+    g_state.sound_enabled = cJSON_IsTrue(sound);
+
   state_save();
   cJSON_Delete(json);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+  return ESP_OK;
+}
+
+static esp_err_t api_servo_config_handler(httpd_req_t *req) {
+  char buf[512];
+  int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+  if (len <= 0) return ESP_FAIL;
+  buf[len] = 0;
+
+  cJSON *json = cJSON_Parse(buf);
+  if (!json) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+  cJSON *sv = cJSON_GetObjectItem(json, "servos");
+  if (sv) {
+    cJSON *dir = cJSON_GetObjectItem(sv, "dir");
+    cJSON *mn = cJSON_GetObjectItem(sv, "min");
+    cJSON *mx = cJSON_GetObjectItem(sv, "max");
+    if (cJSON_IsArray(dir) && cJSON_IsArray(mn) && cJSON_IsArray(mx)) {
+      for (int i = 0; i < 6 && i < cJSON_GetArraySize(dir); i++) {
+        cJSON *d = cJSON_GetArrayItem(dir, i);
+        cJSON *n = cJSON_GetArrayItem(mn, i);
+        cJSON *x = cJSON_GetArrayItem(mx, i);
+        if (cJSON_IsBool(d)) g_state.servo_dir[i] = cJSON_IsTrue(d);
+        if (cJSON_IsNumber(n)) g_state.sv_min[i] = (uint16_t)n->valuedouble;
+        if (cJSON_IsNumber(x)) g_state.sv_max[i] = (uint16_t)x->valuedouble;
+      }
+      state_save();
+    }
+  }
+
+  cJSON_Delete(json);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+  return ESP_OK;
+}
+
+static esp_err_t api_audio_fft_handler(httpd_req_t *req) {
+  cJSON *root = cJSON_CreateObject();
+#if CONFIG_BOARD_DISPLAY
+  int num_samples = 512;
+  int16_t *buf = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+  if (buf) {
+    i2s_chan_handle_t rx_h;
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    i2s_std_config_t std_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .gpio_cfg = {.mclk = 4, .bclk = 5, .ws = 7, .dout = 8, .din = 6},
+    };
+    size_t read = 0;
+    if (i2s_new_channel(&chan_cfg, NULL, &rx_h) == ESP_OK &&
+        i2s_channel_init_std_mode(rx_h, &std_cfg) == ESP_OK &&
+        i2s_channel_enable(rx_h) == ESP_OK) {
+      i2s_channel_read(rx_h, buf, num_samples * sizeof(int16_t), &read, pdMS_TO_TICKS(500));
+      i2s_channel_disable(rx_h);
+      i2s_del_channel(rx_h);
+    }
+    int peak = 0;
+    uint32_t energy = 0;
+    int bins[8] = {0};
+    for (int i = 0; i < (int)(read / 2); i++) {
+      int v = abs(buf[i]);
+      if (v > peak) peak = v;
+      energy += v * v;
+      int bin = (i * 8) / (read / 2);
+      if (bin < 8) bins[bin] += v;
+    }
+    cJSON_AddNumberToObject(root, "peak", peak);
+    cJSON_AddNumberToObject(root, "energy", (double)energy);
+    cJSON *spec = cJSON_CreateArray();
+    for (int i = 0; i < 8; i++)
+      cJSON_AddItemToArray(spec, cJSON_CreateNumber(bins[i]));
+    cJSON_AddItemToObject(root, "spectrum", spec);
+    free(buf);
+    cJSON_AddStringToObject(root, "status", "ok");
+  } else {
+    cJSON_AddStringToObject(root, "status", "error");
+  }
+#else
+  cJSON_AddStringToObject(root, "status", "skip");
+#endif
+  const char *json = cJSON_Print(root);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, json);
+  free((void *)json);
+  cJSON_Delete(root);
   return ESP_OK;
 }
 
@@ -446,6 +551,8 @@ static const httpd_uri_t api_uris[] = {
     {.uri = "/api/hold", .method = HTTP_POST, .handler = api_hold_handler},
     {.uri = "/api/reset", .method = HTTP_POST, .handler = api_reset_handler},
     {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_handler},
+    {.uri = "/api/servo_config", .method = HTTP_POST, .handler = api_servo_config_handler},
+    {.uri = "/api/audio/fft", .method = HTTP_GET, .handler = api_audio_fft_handler},
     {.uri = "/api/test/audio", .method = HTTP_POST, .handler = api_test_audio_handler},
     {.uri = "/api/test/sdcard", .method = HTTP_POST, .handler = api_test_sdcard_handler},
 };

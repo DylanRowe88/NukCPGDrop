@@ -2,8 +2,12 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_touch.h"
+#include "esp_lcd_touch_ft5x06.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "i2c_bus.h"
 #include "lvgl.h"
 #include <string.h>
 
@@ -17,6 +21,14 @@ static spi_device_handle_t spi_dev;
 #define PIN_BL 45
 #define DISP_H_RES 240
 #define DISP_V_RES 320
+
+#define TOUCH_RST 18
+#define TOUCH_INT 17
+#define TOUCH_I2C_SDA 16
+#define TOUCH_I2C_SCL 15
+#define TOUCH_ADDR 0x38
+
+static esp_lcd_touch_handle_t tp_handle = NULL;
 
 static void ili9341_send_cmd(uint8_t cmd) {
   spi_transaction_t t = {.length = 8, .tx_buffer = &cmd};
@@ -36,27 +48,127 @@ static void ili9341_send_data_byte(uint8_t data) {
 
 static void ili9341_init(void) {
   ili9341_send_cmd(0x01);
-  vTaskDelay(pdMS_TO_TICKS(120)); // SW reset
-  ili9341_send_cmd(0x11);
-  vTaskDelay(pdMS_TO_TICKS(120)); // Sleep out
+  vTaskDelay(pdMS_TO_TICKS(120));
+
+  ili9341_send_cmd(0xCF);
+  ili9341_send_data_byte(0x00);
+  ili9341_send_data_byte(0xC1);
+  ili9341_send_data_byte(0x30);
+
+  ili9341_send_cmd(0xED);
+  ili9341_send_data_byte(0x64);
+  ili9341_send_data_byte(0x03);
+  ili9341_send_data_byte(0x12);
+  ili9341_send_data_byte(0x81);
+
+  ili9341_send_cmd(0xE8);
+  ili9341_send_data_byte(0x85);
+  ili9341_send_data_byte(0x00);
+  ili9341_send_data_byte(0x78);
+
+  ili9341_send_cmd(0xCB);
+  ili9341_send_data_byte(0x39);
+  ili9341_send_data_byte(0x2C);
+  ili9341_send_data_byte(0x00);
+  ili9341_send_data_byte(0x34);
+  ili9341_send_data_byte(0x02);
+
+  ili9341_send_cmd(0xF7);
+  ili9341_send_data_byte(0x20);
+
+  ili9341_send_cmd(0xEA);
+  ili9341_send_data_byte(0x00);
+  ili9341_send_data_byte(0x00);
+
+  ili9341_send_cmd(0xC0);
+  ili9341_send_data_byte(0x13);
+
+  ili9341_send_cmd(0xC1);
+  ili9341_send_data_byte(0x13);
+
+  ili9341_send_cmd(0xC5);
+  ili9341_send_data_byte(0x22);
+  ili9341_send_data_byte(0x35);
+
+  ili9341_send_cmd(0xC7);
+  ili9341_send_data_byte(0xBD);
+
+  ili9341_send_cmd(0x21);
+
   ili9341_send_cmd(0x36);
-  ili9341_send_data_byte(0x40); // MADCTL: RGB, MY=1 (portrait flip)
+  ili9341_send_data_byte(0x08);
+
+  ili9341_send_cmd(0xB6);
+  ili9341_send_data_byte(0x0A);
+  ili9341_send_data_byte(0xA2);
+
   ili9341_send_cmd(0x3A);
-  ili9341_send_data_byte(0x55); // COLMOD: 16-bit
-  ili9341_send_cmd(0x29);       // Display ON
+  ili9341_send_data_byte(0x55);
+
+  ili9341_send_cmd(0xF6);
+  ili9341_send_data_byte(0x01);
+  ili9341_send_data_byte(0x30);
+
+  ili9341_send_cmd(0xB1);
+  ili9341_send_data_byte(0x00);
+  ili9341_send_data_byte(0x1B);
+
+  ili9341_send_cmd(0xF2);
+  ili9341_send_data_byte(0x00);
+
+  ili9341_send_cmd(0x26);
+  ili9341_send_data_byte(0x01);
+
+  ili9341_send_cmd(0xE0);
+  ili9341_send_data_byte(0x0F);
+  ili9341_send_data_byte(0x35);
+  ili9341_send_data_byte(0x31);
+  ili9341_send_data_byte(0x0B);
+  ili9341_send_data_byte(0x0E);
+  ili9341_send_data_byte(0x06);
+  ili9341_send_data_byte(0x49);
+  ili9341_send_data_byte(0xA7);
+  ili9341_send_data_byte(0x33);
+  ili9341_send_data_byte(0x07);
+  ili9341_send_data_byte(0x0F);
+  ili9341_send_data_byte(0x03);
+  ili9341_send_data_byte(0x0C);
+  ili9341_send_data_byte(0x0A);
+  ili9341_send_data_byte(0x00);
+
+  ili9341_send_cmd(0xE1);
+  ili9341_send_data_byte(0x00);
+  ili9341_send_data_byte(0x0A);
+  ili9341_send_data_byte(0x0F);
+  ili9341_send_data_byte(0x04);
+  ili9341_send_data_byte(0x11);
+  ili9341_send_data_byte(0x08);
+  ili9341_send_data_byte(0x36);
+  ili9341_send_data_byte(0x58);
+  ili9341_send_data_byte(0x4D);
+  ili9341_send_data_byte(0x07);
+  ili9341_send_data_byte(0x10);
+  ili9341_send_data_byte(0x0C);
+  ili9341_send_data_byte(0x32);
+  ili9341_send_data_byte(0x34);
+  ili9341_send_data_byte(0x0F);
+
+  ili9341_send_cmd(0x11);
+  vTaskDelay(pdMS_TO_TICKS(120));
+  ili9341_send_cmd(0x29);
   ESP_LOGI(TAG, "ILI9341 initialized");
 }
 
 static void ili9341_set_window(uint16_t x1, uint16_t y1, uint16_t x2,
                                uint16_t y2) {
   uint8_t data[4];
-  ili9341_send_cmd(0x2A); // CASET
+  ili9341_send_cmd(0x2A);
   data[0] = x1 >> 8;
   data[1] = x1 & 0xFF;
   data[2] = x2 >> 8;
   data[3] = x2 & 0xFF;
   ili9341_send_data(data, 4);
-  ili9341_send_cmd(0x2B); // PASET
+  ili9341_send_cmd(0x2B);
   data[0] = y1 >> 8;
   data[1] = y1 & 0xFF;
   data[2] = y2 >> 8;
@@ -67,7 +179,7 @@ static void ili9341_set_window(uint16_t x1, uint16_t y1, uint16_t x2,
 static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area,
                      lv_color_t *color_map) {
   ili9341_set_window(area->x1, area->y1, area->x2, area->y2);
-  ili9341_send_cmd(0x2C); // RAMWR
+  ili9341_send_cmd(0x2C);
   size_t size = (area->x2 - area->x1 + 1) * (area->y2 - area->y1 + 1) *
                 sizeof(lv_color_t);
   gpio_set_level(PIN_DC, 1);
@@ -77,7 +189,6 @@ static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area,
 }
 
 void lv_port_disp_init(void) {
-  // SPI bus
   spi_bus_config_t bus = {
       .mosi_io_num = 11,
       .miso_io_num = 13,
@@ -88,7 +199,6 @@ void lv_port_disp_init(void) {
   };
   ESP_ERROR_CHECK(spi_bus_initialize(SPI_HOST, &bus, SPI_DMA_CH_AUTO));
 
-  // SPI device
   spi_device_interface_config_t dev = {
       .mode = 0,
       .clock_speed_hz = 40 * 1000 * 1000,
@@ -98,17 +208,13 @@ void lv_port_disp_init(void) {
   };
   ESP_ERROR_CHECK(spi_bus_add_device(SPI_HOST, &dev, &spi_dev));
 
-  // GPIOs
   gpio_set_direction(PIN_DC, GPIO_MODE_OUTPUT);
   gpio_set_level(PIN_DC, 0);
-
-  // Backlight
   gpio_set_direction(PIN_BL, GPIO_MODE_OUTPUT);
   gpio_set_level(PIN_BL, 1);
 
   ili9341_init();
 
-  // LVGL display driver
   static lv_disp_drv_t drv;
   static lv_disp_draw_buf_t draw_buf;
   static lv_color_t *buf = NULL;
@@ -126,8 +232,59 @@ void lv_port_disp_init(void) {
   ESP_LOGI(TAG, "Display initialized (%dx%d)", DISP_H_RES, DISP_V_RES);
 }
 
+static void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+  if (!tp_handle) return;
+  esp_lcd_touch_read_data(tp_handle);
+  uint8_t point_cnt = 0;
+  esp_lcd_touch_point_data_t points[1];
+  esp_lcd_touch_get_data(tp_handle, points, &point_cnt, 1);
+  if (point_cnt > 0 && points[0].strength > 0) {
+    data->point.x = points[0].x;
+    data->point.y = points[0].y;
+    data->state = LV_INDEV_STATE_PR;
+  } else {
+    data->state = LV_INDEV_STATE_REL;
+  }
+}
+
 void lv_port_indev_init(void) {
-  // Touch is handled by the FT6336G on I2C
-  // For MVP, we skip touch input and use buttons only
-  ESP_LOGI(TAG, "Touch input skipped (MVP mode)");
+  i2c_master_bus_handle_t bus = i2c_bus_init(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 100000);
+  if (!bus) {
+    ESP_LOGW(TAG, "I2C init failed — touch disabled");
+    return;
+  }
+
+  gpio_set_direction(TOUCH_RST, GPIO_MODE_OUTPUT);
+  gpio_set_level(TOUCH_RST, 0);
+  vTaskDelay(pdMS_TO_TICKS(10));
+  gpio_set_level(TOUCH_RST, 1);
+  vTaskDelay(pdMS_TO_TICKS(10));
+
+  const esp_lcd_panel_io_i2c_config_t io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+  esp_lcd_panel_io_handle_t tp_io = NULL;
+  if (esp_lcd_new_panel_io_i2c(bus, &io_config, &tp_io) != ESP_OK) {
+    ESP_LOGW(TAG, "Touch IO init failed");
+    return;
+  }
+
+  esp_lcd_touch_config_t tp_cfg = {
+      .x_max = DISP_H_RES,
+      .y_max = DISP_V_RES,
+      .rst_gpio_num = GPIO_NUM_NC,
+      .int_gpio_num = GPIO_NUM_NC,
+      .levels = {.reset = 0, .interrupt = 0},
+      .flags = {.swap_xy = 0, .mirror_x = 0, .mirror_y = 0},
+  };
+
+  if (esp_lcd_touch_new_i2c_ft5x06(tp_io, &tp_cfg, &tp_handle) != ESP_OK) {
+    ESP_LOGW(TAG, "FT6336G init failed — touch disabled");
+    return;
+  }
+  ESP_LOGI(TAG, "FT6336G touch initialized");
+
+  static lv_indev_drv_t indev_drv;
+  lv_indev_drv_init(&indev_drv);
+  indev_drv.type = LV_INDEV_TYPE_POINTER;
+  indev_drv.read_cb = touch_read_cb;
+  lv_indev_drv_register(&indev_drv);
 }

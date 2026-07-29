@@ -48,6 +48,12 @@ defaults:
   g_state.custom_interval = 2000;
   g_state.range_min = 300;
   g_state.range_max = 2000;
+  g_state.sound_enabled = true;
+  for (int i = 0; i < 6; i++) {
+    g_state.servo_dir[i] = false;
+    g_state.sv_min[i] = 25;
+    g_state.sv_max[i] = 120;
+  }
   return ESP_OK;
 }
 

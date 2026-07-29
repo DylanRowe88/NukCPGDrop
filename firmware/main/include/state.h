@@ -27,6 +27,10 @@ typedef struct {
   uint32_t range_max;
   int battery_millivolts;
   int battery_percent;
+  bool servo_dir[6];
+  uint16_t sv_min[6];
+  uint16_t sv_max[6];
+  bool sound_enabled;
 } nukcpgdrop_state_t;
 
 extern nukcpgdrop_state_t g_state;

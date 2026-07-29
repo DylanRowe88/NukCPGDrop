@@ -9,16 +9,6 @@ public enum Difficulty
     Random = 2
 }
 
-public class DropConfiguration
-{
-    public Difficulty Difficulty { get; set; } = Difficulty.Short;
-    public bool DoubleDrop { get; set; } = false;
-    public int DropCount { get; set; } = 0;
-    public int CustomInterval { get; set; } = 2000;
-    public int RangeMin { get; set; } = 300;
-    public int RangeMax { get; set; } = 2000;
-}
-
 public class LedColor
 {
     public int R { get; set; }
@@ -64,6 +54,35 @@ public class SystemStatus
 
     [JsonPropertyName("wifi")]
     public WifiInfo? Wifi { get; set; }
+
+    [JsonPropertyName("sound_enabled")]
+    public bool SoundEnabled { get; set; } = true;
+
+    [JsonPropertyName("servos")]
+    public ServoConfig? Servos { get; set; }
+}
+
+public class ServoConfig
+{
+    [JsonPropertyName("dir")]
+    public bool[] Dir { get; set; } = new bool[6];
+
+    [JsonPropertyName("min")]
+    public int[] Min { get; set; } = new int[6];
+
+    [JsonPropertyName("max")]
+    public int[] Max { get; set; } = new int[6];
+}
+
+public class DropConfiguration
+{
+    public Difficulty Difficulty { get; set; } = Difficulty.Short;
+    public bool DoubleDrop { get; set; } = false;
+    public int DropCount { get; set; } = 0;
+    public int CustomInterval { get; set; } = 2000;
+    public int RangeMin { get; set; } = 300;
+    public int RangeMax { get; set; } = 2000;
+    public bool SoundEnabled { get; set; } = true;
 }
 
 public class DropCommand

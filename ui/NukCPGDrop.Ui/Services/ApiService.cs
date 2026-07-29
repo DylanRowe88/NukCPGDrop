@@ -77,7 +77,18 @@ public class ApiService
                 custom_interval = config.CustomInterval,
                 range_min = config.RangeMin,
                 range_max = config.RangeMax,
+                sound_enabled = config.SoundEnabled,
             });
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
+    public async Task<bool> PostAsync(string path, object body)
+    {
+        try
+        {
+            var response = await _http.PostAsJsonAsync(path, body);
             return response.IsSuccessStatusCode;
         }
         catch { return false; }
