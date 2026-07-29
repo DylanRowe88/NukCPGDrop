@@ -22,4 +22,4 @@ firmware/sdkconfig.old
 # Board example code (not project docs)
 docs/2.8inch ESP32-S3 Display/
 docs/datasheets/
-docs/flash/
+# docs/flash/ is a WebSerial firmware flasher served via GitHub Pages
