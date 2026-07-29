@@ -5,7 +5,6 @@ TEST_CASE("state init loads defaults", "[state]") {
   esp_err_t ret = state_init();
   TEST_ASSERT_EQUAL(ESP_OK, ret);
   TEST_ASSERT_EQUAL(DIFFICULTY_SHORT, g_state.difficulty);
-  TEST_ASSERT_FALSE(g_state.double_drop);
 }
 
 TEST_CASE("state difficulty persists", "[state]") {
@@ -16,14 +15,6 @@ TEST_CASE("state difficulty persists", "[state]") {
   nukcpgdrop_state_t loaded;
   state_load(&loaded);
   TEST_ASSERT_EQUAL(DIFFICULTY_LONG, loaded.difficulty);
-}
-
-TEST_CASE("state double drop toggle", "[state]") {
-  state_init();
-  state_set_double_drop(true);
-  TEST_ASSERT_TRUE(g_state.double_drop);
-  state_set_double_drop(false);
-  TEST_ASSERT_FALSE(g_state.double_drop);
 }
 
 TEST_CASE("state drop counter increments", "[state]") {
@@ -42,11 +33,17 @@ TEST_CASE("state drop interval", "[state]") {
 
 TEST_CASE("state sequence save/load", "[state]") {
   state_init();
-  uint8_t seq[6] = {5, 3, 1, 0, 2, 4};
+  uint8_t seq[16] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
   state_save_sequence(seq, 2);
 
   nukcpgdrop_state_t loaded;
   state_load(&loaded);
   TEST_ASSERT_EQUAL(2, loaded.last_completed);
-  TEST_ASSERT_EQUAL_UINT8_ARRAY(seq, loaded.last_sequence, 6);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(seq, loaded.last_sequence, 16);
+}
+
+TEST_CASE("state start stop defaults", "[state]") {
+  state_init();
+  TEST_ASSERT_EQUAL(0, g_state.sv_start_pos);
+  TEST_ASSERT_EQUAL(180, g_state.sv_stop_pos);
 }

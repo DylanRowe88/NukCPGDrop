@@ -36,14 +36,11 @@ public class SystemStatus
     [JsonPropertyName("difficulty")]
     public int Difficulty { get; set; }
 
-    [JsonPropertyName("double_drop")]
-    public bool DoubleDrop { get; set; }
-
     [JsonPropertyName("drop_count")]
     public int DropCount { get; set; }
 
     [JsonPropertyName("held")]
-    public bool[] Held { get; set; } = new bool[6];
+    public bool[] Held { get; set; } = new bool[16];
 
     [JsonPropertyName("pca9685_present")]
     public bool Pca9685Present { get; set; }
@@ -57,6 +54,12 @@ public class SystemStatus
     [JsonPropertyName("range_max")]
     public int RangeMax { get; set; }
 
+    [JsonPropertyName("sv_start_pos")]
+    public int SvStartPos { get; set; }
+
+    [JsonPropertyName("sv_stop_pos")]
+    public int SvStopPos { get; set; }
+
     [JsonPropertyName("led")]
     public LedColor? Led { get; set; }
 
@@ -65,31 +68,17 @@ public class SystemStatus
 
     [JsonPropertyName("sound_enabled")]
     public bool SoundEnabled { get; set; } = true;
-
-    [JsonPropertyName("servos")]
-    public ServoConfig? Servos { get; set; }
-}
-
-public class ServoConfig
-{
-    [JsonPropertyName("dir")]
-    public bool[] Dir { get; set; } = new bool[6];
-
-    [JsonPropertyName("min")]
-    public int[] Min { get; set; } = new int[6];
-
-    [JsonPropertyName("max")]
-    public int[] Max { get; set; } = new int[6];
 }
 
 public class DropConfiguration
 {
     public Difficulty Difficulty { get; set; } = Difficulty.Short;
-    public bool DoubleDrop { get; set; } = false;
     public int DropCount { get; set; } = 0;
     public int CustomInterval { get; set; } = 2000;
     public int RangeMin { get; set; } = 300;
     public int RangeMax { get; set; } = 2000;
+    public int SvStartPos { get; set; } = 0;
+    public int SvStopPos { get; set; } = 180;
     public bool SoundEnabled { get; set; } = true;
 }
 

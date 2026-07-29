@@ -1,5 +1,5 @@
 <div class="drop-status">
-    @for (int i = 0; i < 6; i++)
+    @for (int i = 0; i < Held.Length; i++)
     {
         <div class="can-slot @StatusClass(i) @(DroppingIndex == i ? "dropping" : "")"
              style="animation-delay: @($"{i * 0.1}s")"
@@ -16,7 +16,7 @@
 </div>
 
 @code {
-    [Parameter] public bool[] Held { get; set; } = new bool[6];
+    [Parameter] public bool[] Held { get; set; } = new bool[16];
     [Parameter] public int DroppingIndex { get; set; } = -1;
     [Parameter] public bool SequenceActive { get; set; }
     [Parameter] public EventCallback<int> OnToggleCan { get; set; }
@@ -31,17 +31,17 @@
 <style>
     .drop-status {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.5rem;
-        margin: 1rem 0;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.4rem;
+        margin: 0.75rem 0;
     }
     .can-slot {
         position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 0.75rem 0.5rem;
-        border-radius: 10px;
+        padding: 0.5rem 0.3rem;
+        border-radius: 8px;
         background: var(--slot-bg, #1a1a1a);
         transition: background 0.3s, transform 0.3s;
         cursor: pointer;
@@ -63,11 +63,11 @@
         animation: can-drop 0.4s ease-in forwards;
     }
     .can-number {
-        font-size: clamp(0.8rem, 2.5vw, 1rem);
+        font-size: clamp(0.7rem, 2vw, 0.85rem);
         font-weight: 600;
     }
     .can-state {
-        font-size: clamp(1.2rem, 3vw, 1.5rem);
+        font-size: clamp(1rem, 2.5vw, 1.3rem);
         line-height: 1;
     }
     .drop-indicator {

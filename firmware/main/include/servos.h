@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define SERVO_COUNT 6
+#define SERVO_COUNT 16
 
 typedef enum {
   SERVO_POSITION_HOLD = 0,

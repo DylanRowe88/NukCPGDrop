@@ -32,44 +32,70 @@ esp_err_t audio_init(void) {
   i2c_bus_init(16, 15, 100000);
   es8311_ensure_dev();
 
-  // Reset
-  es8311_write_reg(0x01, 0x01);
-  vTaskDelay(pdMS_TO_TICKS(50));
+  // Reset: use hardware reset sequence from official driver
+  es8311_write_reg(0x00, 0x1F);
+  vTaskDelay(pdMS_TO_TICKS(20));
+  es8311_write_reg(0x00, 0x00);
+  vTaskDelay(pdMS_TO_TICKS(20));
+  es8311_write_reg(0x00, 0x80); // Power-on command
+  vTaskDelay(pdMS_TO_TICKS(20));
 
-  // Clock config: MCLK from MCLK pin, slave mode
-  es8311_write_reg(0x00, 0x3F); // I2S slave, 16-bit
+  // REG01 = 0x3F: enable all clocks, MCLK from MCLK pin, normal polarity
+  es8311_write_reg(0x01, 0x3F);
 
-  // Power up analog
-  es8311_write_reg(0x0D, 0x01); // power up analog
+  // Clock dividers for 16kHz @ MCLK=6.144MHz (384*16000)
+  // Using coefficient: {6144000, 16000, 0x03, 0x01, 0x01, 0x01, 0x00, 0x00, 0xff, 0x04, 0x10, 0x10}
+  es8311_write_reg(0x02, (0x03-1)<<5 | 0x01<<3); // pre_div=3, pre_multi=1
+  es8311_write_reg(0x03, 0x00<<6 | 0x10);         // fs_mode=0, adc_osr=0x10
+  es8311_write_reg(0x04, 0x10);                    // dac_osr=0x10
+  es8311_write_reg(0x05, (0x01-1)<<4 | (0x01-1)); // adc_div=1, dac_div=1
+  es8311_write_reg(0x06, 0x00<<5 | (0x04-1));     // sclk normal, bclk_div=4
+  es8311_write_reg(0x07, 0x00);                    // lrck_h=0
+  es8311_write_reg(0x08, 0xFF);                    // lrck_l=0xFF
 
-  // Enable PGA + ADC modulator
-  es8311_write_reg(0x0E, 0x02); // enable PGA
+  // Slave mode, I2S format, 16-bit
+  es8311_write_reg(0x09, 3<<2); // SDP In: 16-bit
+  es8311_write_reg(0x0A, 3<<2); // SDP Out: 16-bit
+
+  // Power up analog circuitry
+  es8311_write_reg(0x0D, 0x01);
+
+  // Enable analog PGA, enable ADC modulator
+  es8311_write_reg(0x0E, 0x02);
+
+  // Enable mic bias (single-ended), set PGA gain
+  es8311_write_reg(0x0F, 0x02); // bit1=mic bias enable
+
+  // Power up DAC & ADC
+  es8311_write_reg(0x10, 0x1E); // DAC & ADC power up
+  es8311_write_reg(0x11, 0x7F); // ADC mixer & PGA bias
 
   // Power up DAC
-  es8311_write_reg(0x12, 0x00); // DAC power up (0=normal)
+  es8311_write_reg(0x12, 0x00);
 
-  // Enable HP drive output
-  es8311_write_reg(0x13, 0x10); // HP drive enable
+  // Enable output to HP drive
+  es8311_write_reg(0x13, 0x10);
 
-  // Power management
-  es8311_write_reg(0x10, 0x1E); // DAC & ADC power up
-  es8311_write_reg(0x11, 0x7F); // ADC mixer & PGA
+  // MIC config: analog MIC, PGA gain max
+  es8311_write_reg(0x14, 0x1A);
 
-  // Clock divider
-  es8311_write_reg(0x14, 0x0C); // MCLK = 384 * FS
+  // ADC gain
+  es8311_write_reg(0x17, 0xC8);
 
-  // Sample rate
-  es8311_write_reg(0x15, 0x00); // 16kHz
+  // MIC gain (24dB)
+  es8311_write_reg(0x16, 6);
 
-  // Bypass ADC equalizer, cancel DC offset
+  // ADC Equalizer bypass, DC offset cancel
   es8311_write_reg(0x1C, 0x6A);
+
+  // DAC volume: right and left channels
+  // volume=85: 85*256/100 - 1 = 217 = 0xD9
+  es8311_write_reg(0x20, 0xD9); // DAC RVOL
+  es8311_write_reg(0x21, 0xD9); // DAC LVOL
 
   // Bypass DAC equalizer
   es8311_write_reg(0x37, 0x08);
 
-  // Set volume to 85
-  es8311_write_reg(0x38, 0x55);
-
-  ESP_LOGI(TAG, "ES8311 audio codec initialized (full init)");
+  ESP_LOGI(TAG, "ES8311 audio codec initialized (official driver sequence)");
   return ESP_OK;
 }

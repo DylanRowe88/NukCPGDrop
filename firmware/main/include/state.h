@@ -18,19 +18,17 @@ typedef enum {
 
 typedef struct {
   difficulty_t difficulty;
-  bool double_drop;
   uint32_t drop_count;
-  uint8_t last_sequence[6];
+  uint8_t last_sequence[16];
   uint8_t last_completed;
   uint32_t custom_interval;
   uint32_t range_min;
   uint32_t range_max;
   int battery_millivolts;
   int battery_percent;
-  bool servo_dir[6];
-  uint16_t sv_min[6];
-  uint16_t sv_max[6];
   bool sound_enabled;
+  uint16_t sv_start_pos;
+  uint16_t sv_stop_pos;
 } nukcpgdrop_state_t;
 
 extern nukcpgdrop_state_t g_state;
@@ -39,7 +37,6 @@ esp_err_t state_init(void);
 esp_err_t state_save(void);
 esp_err_t state_load(nukcpgdrop_state_t *out);
 void state_set_difficulty(difficulty_t d);
-void state_set_double_drop(bool enabled);
 void state_increment_drop_count(void);
 void state_save_sequence(const uint8_t *order, uint8_t completed);
 

@@ -16,7 +16,7 @@
 #include "driver/sdmmc_host.h"
 #include "sdmmc_cmd.h"
 #endif
-#include "driver/i2s_std.h"
+
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"
@@ -54,38 +54,27 @@ static void shuffle_array(uint8_t *arr, size_t n) {
 
 static void drop_sequence_task(void *arg) {
   ensure_servo_sem();
-  uint8_t order[6] = {0, 1, 2, 3, 4, 5};
-  shuffle_array(order, 6);
+  uint8_t order[16];
+  for (int i = 0; i < SERVO_COUNT; i++) order[i] = i;
+  shuffle_array(order, SERVO_COUNT);
   state_save_sequence(order, 0);
 
   uint32_t interval = state_get_drop_interval_ms(g_state.difficulty);
   uint8_t i = 0;
 
-  while (i < 6) {
-    // Acquire semaphore slots before moving servos (max 2 concurrent)
-    int batch = g_state.double_drop && i < 5 ? 2 : 1;
-    for (int s = 0; s < batch; s++)
-      xSemaphoreTake(g_servo_sem, portMAX_DELAY);
-
-    if (batch == 2) {
-      uint8_t pair[2] = {order[i], order[i + 1]};
-      servos_drop_batch(pair, 2);
-      i += 2;
-    } else {
-      servos_drop(order[i]);
-      i++;
-    }
+  while (i < SERVO_COUNT) {
+    xSemaphoreTake(g_servo_sem, portMAX_DELAY);
+    servos_drop(order[i]);
+    i++;
     state_save_sequence(order, i);
     state_increment_drop_count();
 
-    // Release semaphores after the interval delay
-    if (i < 6) {
+    if (i < SERVO_COUNT) {
       if (g_state.difficulty == DIFFICULTY_RANDOM)
         interval = state_get_drop_interval_ms(DIFFICULTY_RANDOM);
       vTaskDelay(pdMS_TO_TICKS(interval));
     }
-    for (int s = 0; s < batch; s++)
-      xSemaphoreGive(g_servo_sem);
+    xSemaphoreGive(g_servo_sem);
   }
 
   vTaskDelete(NULL);
@@ -96,11 +85,10 @@ static void drop_sequence_task(void *arg) {
 static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON *root = cJSON_CreateObject();
   cJSON_AddNumberToObject(root, "difficulty", g_state.difficulty);
-  cJSON_AddBoolToObject(root, "double_drop", g_state.double_drop);
   cJSON_AddNumberToObject(root, "drop_count", g_state.drop_count);
 
   cJSON *held = cJSON_CreateArray();
-  for (int i = 0; i < 6; i++)
+  for (int i = 0; i < SERVO_COUNT; i++)
     cJSON_AddItemToArray(held, cJSON_CreateBool(servos_is_held(i)));
   cJSON_AddItemToObject(root, "held", held);
 
@@ -109,20 +97,8 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(root, "range_min", g_state.range_min);
   cJSON_AddNumberToObject(root, "range_max", g_state.range_max);
   cJSON_AddBoolToObject(root, "sound_enabled", g_state.sound_enabled);
-
-  cJSON *sv_cfg = cJSON_CreateObject();
-  cJSON *sv_dir_arr = cJSON_CreateArray();
-  cJSON *sv_min_arr = cJSON_CreateArray();
-  cJSON *sv_max_arr = cJSON_CreateArray();
-  for (int i = 0; i < 6; i++) {
-    cJSON_AddItemToArray(sv_dir_arr, cJSON_CreateBool(g_state.servo_dir[i]));
-    cJSON_AddItemToArray(sv_min_arr, cJSON_CreateNumber(g_state.sv_min[i]));
-    cJSON_AddItemToArray(sv_max_arr, cJSON_CreateNumber(g_state.sv_max[i]));
-  }
-  cJSON_AddItemToObject(sv_cfg, "dir", sv_dir_arr);
-  cJSON_AddItemToObject(sv_cfg, "min", sv_min_arr);
-  cJSON_AddItemToObject(sv_cfg, "max", sv_max_arr);
-  cJSON_AddItemToObject(root, "servos", sv_cfg);
+  cJSON_AddNumberToObject(root, "sv_start_pos", g_state.sv_start_pos);
+  cJSON_AddNumberToObject(root, "sv_stop_pos", g_state.sv_stop_pos);
 
   led_color_t lc;
   led_get_color(&lc);
@@ -182,7 +158,7 @@ static esp_err_t api_hold_handler(httpd_req_t *req) {
   cJSON *id_item = cJSON_GetObjectItem(json, "id");
   if (cJSON_IsNumber(id_item)) {
     uint8_t id = (uint8_t)id_item->valuedouble;
-    if (id >= 1 && id <= 6) {
+    if (id >= 1 && id <= SERVO_COUNT) {
       ensure_servo_sem();
       xSemaphoreTake(g_servo_sem, portMAX_DELAY);
       servos_set(id - 1, SERVO_POSITION_HOLD);
@@ -219,7 +195,7 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
   cJSON *id_item = cJSON_GetObjectItem(json, "id");
   if (cJSON_IsNumber(id_item)) {
     uint8_t id = (uint8_t)id_item->valuedouble;
-    if (id >= 1 && id <= 6) {
+    if (id >= 1 && id <= SERVO_COUNT) {
       ensure_servo_sem();
       xSemaphoreTake(g_servo_sem, portMAX_DELAY);
       servos_drop(id - 1);
@@ -260,10 +236,6 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
   if (cJSON_IsNumber(diff))
     state_set_difficulty((difficulty_t)diff->valuedouble);
 
-  cJSON *dd = cJSON_GetObjectItem(json, "double_drop");
-  if (cJSON_IsBool(dd))
-    state_set_double_drop(cJSON_IsTrue(dd));
-
   cJSON *ci = cJSON_GetObjectItem(json, "custom_interval");
   if (cJSON_IsNumber(ci))
     g_state.custom_interval = (uint32_t)ci->valuedouble;
@@ -280,6 +252,14 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
   if (cJSON_IsBool(sound))
     g_state.sound_enabled = cJSON_IsTrue(sound);
 
+  cJSON *sv_sp = cJSON_GetObjectItem(json, "sv_start_pos");
+  if (cJSON_IsNumber(sv_sp))
+    g_state.sv_start_pos = (uint16_t)sv_sp->valuedouble;
+
+  cJSON *sv_stp = cJSON_GetObjectItem(json, "sv_stop_pos");
+  if (cJSON_IsNumber(sv_stp))
+    g_state.sv_stop_pos = (uint16_t)sv_stp->valuedouble;
+
   state_save();
   cJSON_Delete(json);
   httpd_resp_set_type(req, "application/json");
@@ -288,7 +268,7 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_servo_config_handler(httpd_req_t *req) {
-  char buf[512];
+  char buf[128];
   int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
   if (len <= 0)
     return ESP_FAIL;
@@ -300,27 +280,15 @@ static esp_err_t api_servo_config_handler(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  cJSON *sv = cJSON_GetObjectItem(json, "servos");
-  if (sv) {
-    cJSON *dir = cJSON_GetObjectItem(sv, "dir");
-    cJSON *mn = cJSON_GetObjectItem(sv, "min");
-    cJSON *mx = cJSON_GetObjectItem(sv, "max");
-    if (cJSON_IsArray(dir) && cJSON_IsArray(mn) && cJSON_IsArray(mx)) {
-      for (int i = 0; i < 6 && i < cJSON_GetArraySize(dir); i++) {
-        cJSON *d = cJSON_GetArrayItem(dir, i);
-        cJSON *n = cJSON_GetArrayItem(mn, i);
-        cJSON *x = cJSON_GetArrayItem(mx, i);
-        if (cJSON_IsBool(d))
-          g_state.servo_dir[i] = cJSON_IsTrue(d);
-        if (cJSON_IsNumber(n))
-          g_state.sv_min[i] = (uint16_t)n->valuedouble;
-        if (cJSON_IsNumber(x))
-          g_state.sv_max[i] = (uint16_t)x->valuedouble;
-      }
-      state_save();
-    }
-  }
+  cJSON *sp = cJSON_GetObjectItem(json, "sv_start_pos");
+  if (cJSON_IsNumber(sp))
+    g_state.sv_start_pos = (uint16_t)sp->valuedouble;
 
+  cJSON *stp = cJSON_GetObjectItem(json, "sv_stop_pos");
+  if (cJSON_IsNumber(stp))
+    g_state.sv_stop_pos = (uint16_t)stp->valuedouble;
+
+  state_save();
   cJSON_Delete(json);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
@@ -330,50 +298,39 @@ static esp_err_t api_servo_config_handler(httpd_req_t *req) {
 static esp_err_t api_audio_fft_handler(httpd_req_t *req) {
   cJSON *root = cJSON_CreateObject();
 #if CONFIG_BOARD_DISPLAY
-  int num_samples = 512;
-  int16_t *buf =
-      heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
-  if (buf) {
-    i2s_chan_handle_t rx_h;
-    i2s_chan_config_t chan_cfg =
-        I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    i2s_std_config_t std_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT,
-                                                    I2S_SLOT_MODE_MONO),
-        .gpio_cfg = {.mclk = 4, .bclk = 5, .ws = 7, .dout = 8, .din = 6},
-    };
-    size_t read = 0;
-    if (i2s_new_channel(&chan_cfg, NULL, &rx_h) == ESP_OK &&
-        i2s_channel_init_std_mode(rx_h, &std_cfg) == ESP_OK &&
-        i2s_channel_enable(rx_h) == ESP_OK) {
-      i2s_channel_read(rx_h, buf, num_samples * sizeof(int16_t), &read,
-                       pdMS_TO_TICKS(500));
-      i2s_channel_disable(rx_h);
-      i2s_del_channel(rx_h);
-    }
-    int peak = 0;
-    uint32_t energy = 0;
-    int bins[8] = {0};
-    for (int i = 0; i < (int)(read / 2); i++) {
-      int v = abs(buf[i]);
-      if (v > peak)
-        peak = v;
-      energy += v * v;
-      int bin = (i * 8) / (read / 2);
-      if (bin < 8)
-        bins[bin] += v;
-    }
-    cJSON_AddNumberToObject(root, "peak", peak);
-    cJSON_AddNumberToObject(root, "energy", (double)energy);
-    cJSON *spec = cJSON_CreateArray();
-    for (int i = 0; i < 8; i++)
-      cJSON_AddItemToArray(spec, cJSON_CreateNumber(bins[i]));
-    cJSON_AddItemToObject(root, "spectrum", spec);
-    free(buf);
-    cJSON_AddStringToObject(root, "status", "ok");
+  if (!i2s_rx_handle) {
+    cJSON_AddStringToObject(root, "status", "no_rx_channel");
   } else {
-    cJSON_AddStringToObject(root, "status", "error");
+    int num_samples = 512;
+    int16_t *buf =
+        heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+    if (buf) {
+      size_t read = 0;
+      i2s_channel_read(i2s_rx_handle, buf, num_samples * sizeof(int16_t), &read,
+                       pdMS_TO_TICKS(500));
+      int peak = 0;
+      uint32_t energy = 0;
+      int bins[8] = {0};
+      for (int i = 0; i < (int)(read / 2); i++) {
+        int v = abs(buf[i]);
+        if (v > peak)
+          peak = v;
+        energy += v * v;
+        int bin = (i * 8) / (read / 2);
+        if (bin < 8)
+          bins[bin] += v;
+      }
+      cJSON_AddNumberToObject(root, "peak", peak);
+      cJSON_AddNumberToObject(root, "energy", (double)energy);
+      cJSON *spec = cJSON_CreateArray();
+      for (int i = 0; i < 8; i++)
+        cJSON_AddItemToArray(spec, cJSON_CreateNumber(bins[i]));
+      cJSON_AddItemToObject(root, "spectrum", spec);
+      free(buf);
+      cJSON_AddStringToObject(root, "status", "ok");
+    } else {
+      cJSON_AddStringToObject(root, "status", "oom");
+    }
   }
 #else
   cJSON_AddStringToObject(root, "status", "skip");
@@ -451,46 +408,29 @@ static esp_err_t api_test_audio_handler(httpd_req_t *req) {
   cJSON *root = cJSON_CreateObject();
   const char *json = NULL;
 #if CONFIG_BOARD_DISPLAY
-  int sample_rate = 16000;
-  int duration_ms = 1000;
-  int num_samples = sample_rate * duration_ms / 1000;
-  bool test_ok = false;
+  if (!i2s_rx_handle || !i2s_tx_handle) {
+    cJSON_AddStringToObject(root, "status", "error");
+    cJSON_AddStringToObject(root, "message", "I2S not initialized");
+  } else {
+    int sample_rate = 16000;
+    int duration_ms = 1000;
+    int num_samples = sample_rate * duration_ms / 1000;
 
-  int16_t *sine =
-      heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
-  int16_t *recv_buf =
-      heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+    int16_t *sine =
+        heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
+    int16_t *recv_buf =
+        heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
 
-  if (sine && recv_buf) {
-    for (int i = 0; i < num_samples; i++)
-      sine[i] = (int16_t)(3000 * sinf(2 * 3.14159f * 1000 * i / sample_rate));
-
-    i2s_chan_handle_t tx_h, rx_h;
-    i2s_chan_config_t chan_cfg =
-        I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    i2s_std_config_t std_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT,
-                                                    I2S_SLOT_MODE_MONO),
-        .gpio_cfg = {.mclk = 4, .bclk = 5, .ws = 7, .dout = 8, .din = 6},
-    };
-
-    if (i2s_new_channel(&chan_cfg, &tx_h, &rx_h) == ESP_OK &&
-        i2s_channel_init_std_mode(tx_h, &std_cfg) == ESP_OK &&
-        i2s_channel_enable(tx_h) == ESP_OK &&
-        i2s_channel_enable(rx_h) == ESP_OK) {
+    if (sine && recv_buf) {
+      for (int i = 0; i < num_samples; i++)
+        sine[i] = (int16_t)(3000 * sinf(2 * 3.14159f * 1000 * i / sample_rate));
 
       size_t written = 0, read = 0;
-      i2s_channel_write(tx_h, sine, num_samples * sizeof(int16_t), &written,
+      i2s_channel_write(i2s_tx_handle, sine, num_samples * sizeof(int16_t), &written,
                         pdMS_TO_TICKS(2000));
       vTaskDelay(pdMS_TO_TICKS(200));
-      i2s_channel_read(rx_h, recv_buf, num_samples * sizeof(int16_t), &read,
+      i2s_channel_read(i2s_rx_handle, recv_buf, num_samples * sizeof(int16_t), &read,
                        pdMS_TO_TICKS(2000));
-
-      i2s_channel_disable(tx_h);
-      i2s_del_channel(tx_h);
-      i2s_channel_disable(rx_h);
-      i2s_del_channel(rx_h);
 
       float energy = 0;
       int peak = 0;
@@ -507,17 +447,14 @@ static esp_err_t api_test_audio_handler(httpd_req_t *req) {
       cJSON_AddNumberToObject(root, "energy",
                               (double)(energy / (read / 2 + 1)));
       cJSON_AddBoolToObject(root, "mic_detected", peak > 100);
-      test_ok = true;
+      cJSON_AddStringToObject(root, "status", "ok");
     } else {
-      cJSON_AddStringToObject(root, "message", "I2S init failed");
+      cJSON_AddStringToObject(root, "message", "OOM");
+      cJSON_AddStringToObject(root, "status", "error");
     }
-  } else {
-    cJSON_AddStringToObject(root, "message", "OOM");
+    free(sine);
+    free(recv_buf);
   }
-
-  free(sine);
-  free(recv_buf);
-  cJSON_AddStringToObject(root, "status", test_ok ? "ok" : "error");
 #else
   cJSON_AddStringToObject(root, "status", "skip");
   cJSON_AddStringToObject(root, "message", "No audio hardware");

@@ -1,7 +1,7 @@
 {
   "mainAssemblyName": "NukCPGDrop.Ui",
   "resources": {
-    "hash": "sha256-boJD8+bFU2t2c7CklPMTvATOWzM/rRU8cXLzwLtDowA=",
+    "hash": "sha256-XKdAYt/j1dqH1SIMkYkgkWsW8NctXU3+sun5Q5MNfys=",
     "jsModuleNative": {
       "dotnet.native.js": "sha256-YDHEHpc+/PUWFYa9BMCN3EcVlpemjKD024swcpPfMIQ="
     },
@@ -204,10 +204,10 @@
       "mscorlib.wasm": "sha256-K9Dyt2y2qc5iOiFtzVJ54OrivbmVXDxkD16w+GkNz6Y=",
       "netstandard.wasm": "sha256-cdbfmZR3ZtA/HeSPpbwrUoRjB1vl4OgPSKGeGSmtiug=",
       "System.Private.CoreLib.wasm": "sha256-naY/8zY/5LD24ypcNRlECeSByBMi44aNk+g16oi63Mc=",
-      "NukCPGDrop.Ui.wasm": "sha256-JviILti2pzv6+3qCL6FbVn/d+QzWS7y90wSnPTp3cIc="
+      "NukCPGDrop.Ui.wasm": "sha256-HvB4QXI+icRStyqUi0rq7i9SYlLHHXHMZgUJOQpmNn4="
     },
     "pdb": {
-      "NukCPGDrop.Ui.pdb": "sha256-xU/naWUkUUMqo+H+0aZvzQ0hk9H2NR+6ODZfHprNOgA="
+      "NukCPGDrop.Ui.pdb": "sha256-27FgxaL/ON2zsKG7/xEJo+jECm42KGhhumdSCGzKmFk="
     }
   },
   "cacheBootResources": true,

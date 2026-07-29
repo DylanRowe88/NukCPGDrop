@@ -16,9 +16,8 @@ public class ApiServiceTests
         var expected = new SystemStatus
         {
             Difficulty = 1,
-            DoubleDrop = false,
             DropCount = 5,
-            Held = new[] { true, true, true, true, true, true },
+            Held = new bool[16],
             Pca9685Present = true,
             CustomInterval = 2000,
             RangeMin = 300,

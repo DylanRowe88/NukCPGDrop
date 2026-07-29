@@ -73,11 +73,12 @@ public class ApiService
             var response = await _http.PostAsJsonAsync("/api/config", new
             {
                 difficulty = (int)config.Difficulty,
-                double_drop = config.DoubleDrop,
                 custom_interval = config.CustomInterval,
                 range_min = config.RangeMin,
                 range_max = config.RangeMax,
                 sound_enabled = config.SoundEnabled,
+                sv_start_pos = config.SvStartPos,
+                sv_stop_pos = config.SvStopPos,
             });
             return response.IsSuccessStatusCode;
         }

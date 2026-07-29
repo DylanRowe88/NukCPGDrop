@@ -77,35 +77,21 @@
 
     <section class="debug-section">
         <h2>Servo Positions</h2>
-        <p class="section-note">Drag ends to set range. Toggle arrow to set which end is HELD.</p>
-        @for (int sv = 0; sv < 6; sv++)
-        {
-            var idx = sv;
-            <div class="servo-row">
-                <div class="servo-head">
-                    <span class="servo-label">@(idx + 1)</span>
-                    <span class="servo-state @(_status?.Held != null && _status.Held[idx] ? "held" : "dropped")">
-                        @(_status?.Held != null && _status.Held[idx] ? "HELD" : "DROP")
-                    </span>
-                </div>
-                <div class="servo-slider">
-                    <RangeSlider Min="0" Max="180" Step="1" RangeMode="true"
-                                 LowValue="@((double)_svMin[idx])"
-                                 HighValue="@((double)_svMax[idx])"
-                                 LowValueChanged="(v) => OnSvLow(idx, v)"
-                                 HighValueChanged="(v) => OnSvHigh(idx, v)" />
-                </div>
-                <div class="servo-dir-group">
-                    <button class="servo-dir @(_svDir[idx] ? "active" : "")" @onclick="() => ToggleSvDir(idx)" title="Toggle held direction">
-                        <span class="dir-icon">@(_svDir[idx] ? "\u25B2" : "\u25BC")</span>
-                        <span class="dir-label">@(_svDir[idx] ? "Hi" : "Lo")</span>
-                    </button>
-                </div>
-                <button class="servo-toggle" @onclick="() => ToggleServo(idx)" title="Toggle servo">
-                    <span class="toggle-icon">@(_status?.Held != null && _status.Held[idx] ? "\u25BC" : "\u25B2")</span>
-                </button>
+        <p class="section-note">Global start (held) and stop (release) positions in degrees.</p>
+        <div class="servo-pos-control">
+            <div class="range-row">
+                <span class="range-label">Start (held):</span>
+                <span class="range-value">@_svStartPos&deg;</span>
+                <input type="range" class="range-input" min="0" max="180" value="@_svStartPos"
+                       @onchange="OnSvStartChanged" />
             </div>
-        }
+            <div class="range-row">
+                <span class="range-label">Stop (release):</span>
+                <span class="range-value">@_svStopPos&deg;</span>
+                <input type="range" class="range-input" min="0" max="180" value="@_svStopPos"
+                       @onchange="OnSvStopChanged" />
+            </div>
+        </div>
     </section>
 
     <section class="debug-section">
@@ -144,9 +130,8 @@
     private int lr, lg, lb;
     private string ledColor = "transparent";
     private string clientIp = "--";
-    private int[] _svMin = { 25, 25, 25, 25, 25, 25 };
-    private int[] _svMax = { 120, 120, 120, 120, 120, 120 };
-    private bool[] _svDir = { false, false, false, false, false, false };
+    private int _svStartPos = 0;
+    private int _svStopPos = 180;
     private bool _soundEnabled = true;
     private Timer? _pollTimer;
     private Timer? _fftTimer;
@@ -181,12 +166,8 @@
         {
             _pcaOk = _status.Pca9685Present;
             if (_status.Led != null) { lr = _status.Led.R; lg = _status.Led.G; lb = _status.Led.B; ledColor = $"rgb({lr},{lg},{lb})"; }
-            if (_status.Servos != null)
-            {
-                for (int i = 0; i < 6 && i < _status.Servos.Dir.Length; i++) _svDir[i] = _status.Servos.Dir[i];
-                for (int i = 0; i < 6 && i < _status.Servos.Min.Length; i++) _svMin[i] = _status.Servos.Min[i];
-                for (int i = 0; i < 6 && i < _status.Servos.Max.Length; i++) _svMax[i] = _status.Servos.Max[i];
-            }
+            _svStartPos = _status.SvStartPos;
+            _svStopPos = _status.SvStopPos;
             _soundEnabled = _status.SoundEnabled;
         }
         StateHasChanged();
@@ -234,38 +215,22 @@
         catch { }
     }
 
-    private void OnSvLow(int idx, double v)
+    private async Task OnSvStartChanged(ChangeEventArgs e)
     {
-        if (idx < 0 || idx >= 6) return;
-        _svMin[idx] = (int)Math.Clamp(v, 0, _svMax[idx] - 1);
-        _ = SaveServoConfig();
+        _svStartPos = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        await SaveServoConfig();
     }
 
-    private void OnSvHigh(int idx, double v)
+    private async Task OnSvStopChanged(ChangeEventArgs e)
     {
-        if (idx < 0 || idx >= 6) return;
-        _svMax[idx] = (int)Math.Clamp(v, _svMin[idx] + 1, 180);
-        _ = SaveServoConfig();
-    }
-
-    private void ToggleSvDir(int idx)
-    {
-        if (idx < 0 || idx >= 6) return;
-        _svDir[idx] = !_svDir[idx];
-        _ = SaveServoConfig();
+        _svStopPos = int.TryParse(e.Value?.ToString(), out var v) ? v : 180;
+        await SaveServoConfig();
     }
 
     private async Task SaveServoConfig()
     {
-        try { await Api.PostAsync("/api/servo_config", new { servos = new { dir = _svDir, min = _svMin, max = _svMax } }); }
+        try { await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svStartPos, sv_stop_pos = _svStopPos }); }
         catch { }
-    }
-
-    private async Task ToggleServo(int idx)
-    {
-        if (_status == null || idx >= _status.Held.Length) return;
-        if (_status.Held[idx]) await Api.DropOneAsync(idx + 1); else await Api.HoldOneAsync(idx + 1);
-        await Refresh();
     }
 
     private async Task OnSoundToggled(ChangeEventArgs e)
@@ -318,22 +283,11 @@
     .stat-value.err { color: #dc3545; }
     .client-row { font-size: 0.75rem; padding-left: 1rem; }
     .client-mac { font-family: monospace; font-size: 0.7rem; }
-    .servo-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.4rem; background: #1a1a1a; border-radius: 6px; }
-    .servo-head { display: flex; flex-direction: column; align-items: center; min-width: 45px; gap: 2px; }
-    .servo-label { font-size: 0.85rem; font-weight: 700; }
-    .servo-state { font-size: 0.55rem; font-weight: 600; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; }
-    .servo-state.held { background: #1a3a1a; color: #28a745; }
-    .servo-state.dropped { background: #3a1a1a; color: #dc3545; }
-    .servo-slider { flex: 1; min-width: 0; }
-    .servo-dir-group { flex-shrink: 0; }
-    .servo-dir { width: 36px; height: 32px; border: 1px solid #555; border-radius: 6px; background: #222; color: #888; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.55rem; transition: all 0.2s; line-height: 1; gap: 1px; }
-    .servo-dir.active { border-color: #28a745; color: #28a745; background: #1a3a1a; }
-    .servo-dir:hover { border-color: var(--accent-color, #e63946); }
-    .dir-icon { font-size: 0.7rem; }
-    .dir-label { font-size: 0.5rem; text-transform: uppercase; }
-    .servo-toggle { width: 32px; height: 32px; flex-shrink: 0; border: 1px solid var(--accent-color, #e63946); border-radius: 6px; background: transparent; color: var(--accent-color, #e63946); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
-    .servo-toggle:hover { background: var(--accent-color, #e63946); color: #fff; }
-    .toggle-icon { line-height: 1; }
+    .servo-pos-control { background: #1a1a1a; border-radius: 6px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .range-row { display: flex; align-items: center; gap: 0.5rem; }
+    .range-label { font-size: 0.85rem; min-width: 90px; }
+    .range-value { font-size: 0.85rem; font-weight: 600; min-width: 45px; text-align: right; color: var(--accent-color, #e63946); }
+    .range-input { flex: 1; accent-color: var(--accent-color, #e63946); }
     .sound-controls { background: #1a1a1a; border-radius: 6px; padding: 0.75rem; }
     .toggle-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
     .switch { position: relative; width: 44px; height: 24px; display: inline-block; }

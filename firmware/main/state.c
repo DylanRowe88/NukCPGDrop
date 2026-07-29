@@ -49,11 +49,8 @@ defaults:
   g_state.range_min = 300;
   g_state.range_max = 2000;
   g_state.sound_enabled = true;
-  for (int i = 0; i < 6; i++) {
-    g_state.servo_dir[i] = false;
-    g_state.sv_min[i] = 25;
-    g_state.sv_max[i] = 120;
-  }
+  g_state.sv_start_pos = 0;
+  g_state.sv_stop_pos = 180;
   return ESP_OK;
 }
 
@@ -83,18 +80,13 @@ void state_set_difficulty(difficulty_t d) {
   state_save();
 }
 
-void state_set_double_drop(bool enabled) {
-  g_state.double_drop = enabled;
-  state_save();
-}
-
 void state_increment_drop_count(void) {
   g_state.drop_count++;
   state_save();
 }
 
 void state_save_sequence(const uint8_t *order, uint8_t completed) {
-  memcpy(g_state.last_sequence, order, 6);
+  memcpy(g_state.last_sequence, order, 16);
   g_state.last_completed = completed;
   state_save();
 }

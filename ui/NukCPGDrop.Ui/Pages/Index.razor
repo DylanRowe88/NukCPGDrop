@@ -15,11 +15,9 @@
             RandomEnabled="@_randomEnabled"
             RangeMin="@_rangeMin"
             RangeMax="@_rangeMax"
-            DoubleDrop="@_doubleDrop"
             IntervalChanged="OnIntervalChangedAsync"
             OnRandomToggled="OnRandomToggledAsync"
-            RangeChanged="OnRangeChangedAsync"
-            OnDoubleDropChanged="OnDoubleDropChangedAsync" />
+            RangeChanged="OnRangeChangedAsync" />
 
         @if (_allHeld)
         {
@@ -43,11 +41,11 @@
                     <div class="progress-fill"
                          style="width: @($"{ProgressPercent}%")"></div>
                 </div>
-                <span class="progress-label">@(_dropCount / (_doubleDrop ? 2 : 1))/@(_doubleDrop ? 3 : 6)</span>
+                <span class="progress-label">@(_dropCount)/16</span>
             </div>
         }
 
-        <DropStatus Held="@(_status?.Held ?? new bool[6])"
+        <DropStatus Held="@(_status?.Held ?? new bool[16])"
                     DroppingIndex="@_droppingIndex"
                     SequenceActive="@_isRunning"
                     OnToggleCan="@HandleToggleCan" />
@@ -80,7 +78,6 @@
     private bool _allHeld = true;
     private int _droppingIndex = -1;
     private int _dropCount;
-    private bool _doubleDrop;
     private int _interval = 2000;
     private bool _randomEnabled;
     private int _rangeMin = 300;
@@ -89,9 +86,7 @@
 
     private int TotalDrops => _status?.DropCount ?? 0;
     private bool allHeld => _status?.Held.All(h => h) ?? true;
-    private double ProgressPercent => _doubleDrop
-        ? Math.Min(100, _dropCount / 3.0 * 100)
-        : Math.Min(100, _dropCount / 6.0 * 100);
+    private double ProgressPercent => Math.Min(100, _dropCount / 16.0 * 100);
 
     private int WifiSignalLevel
     {
@@ -126,22 +121,20 @@
             if (prev != null)
             {
                 int droppedNow = 0;
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 16; i++)
                     if (prev.Held[i] && !_status.Held[i]) droppedNow++;
 
                 if (droppedNow > 0)
                 {
                     _isRunning = true;
                     _dropCount += droppedNow;
-                    _doubleDrop = _status.DoubleDrop;
-                    for (int i = 0; i < 6; i++)
+                    for (int i = 0; i < 16; i++)
                         if (prev.Held[i] && !_status.Held[i])
                             _ = AnimateDrop(i);
                 }
 
                 int heldCount = _status.Held.Count(h => h);
-                int threshold = _status.DoubleDrop ? 3 : 6;
-                if (heldCount == 0 || _dropCount >= threshold)
+                if (heldCount == 0 || _dropCount >= 16)
                 {
                     _isRunning = false;
                     _dropCount = 0;
@@ -173,16 +166,15 @@
 
     private async Task StartDrop()
     {
-        _isRunning = true; _dropCount = 0; _doubleDrop = _status?.DoubleDrop ?? false;
-        var c = new DropConfiguration { Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short, DoubleDrop = _doubleDrop, CustomInterval = _randomEnabled ? 0 : _interval, RangeMin = _rangeMin, RangeMax = _rangeMax };
+        _isRunning = true; _dropCount = 0;
+        var c = new DropConfiguration { Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short, CustomInterval = _randomEnabled ? 0 : _interval, RangeMin = _rangeMin, RangeMax = _rangeMax };
         await Api.UpdateConfigAsync(c);
         await Api.DropAllAsync();
     }
 
-    private async Task OnIntervalChangedAsync(int v) { _interval = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Short, DoubleDrop = _doubleDrop, CustomInterval = v }); }
-    private async Task OnRandomToggledAsync(bool v) { _randomEnabled = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = v ? Difficulty.Random : Difficulty.Short, DoubleDrop = _doubleDrop, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
-    private async Task OnRangeChangedAsync((int Min, int Max) r) { _rangeMin = r.Min; _rangeMax = r.Max; if (_randomEnabled) await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, DoubleDrop = _doubleDrop, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
-    private async Task OnDoubleDropChangedAsync(bool v) { _doubleDrop = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short, DoubleDrop = v, CustomInterval = _interval }); }
+    private async Task OnIntervalChangedAsync(int v) { _interval = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Short, CustomInterval = v }); }
+    private async Task OnRandomToggledAsync(bool v) { _randomEnabled = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = v ? Difficulty.Random : Difficulty.Short, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
+    private async Task OnRangeChangedAsync((int Min, int Max) r) { _rangeMin = r.Min; _rangeMax = r.Max; if (_randomEnabled) await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
     public void Dispose() => _pollTimer?.Dispose();
 }
 

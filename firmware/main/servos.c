@@ -22,14 +22,12 @@ static uint16_t pulse_to_pca9685(uint16_t pulse_us) {
   return (uint16_t)((uint32_t)pulse_us * PCA9685_MAX_VALUE / SERVO_CYCLE_US);
 }
 
+static uint16_t deg_to_pulse(uint8_t deg) {
+  return (uint16_t)(500 + (uint32_t)deg * 2000 / 180);
+}
+
 static uint16_t servo_pulse_for(uint8_t index, bool held) {
-  bool dir = (index < 6) ? g_state.servo_dir[index] : false;
-  uint16_t min_pulse = SERVO_PULSE_MIN_US;
-  uint16_t max_pulse = SERVO_PULSE_MAX_US;
-  if (dir) {
-    return held ? max_pulse : min_pulse;
-  }
-  return held ? min_pulse : max_pulse;
+  return deg_to_pulse(held ? g_state.sv_start_pos : g_state.sv_stop_pos);
 }
 
 esp_err_t servos_init(void) {
@@ -103,8 +101,9 @@ esp_err_t servos_hold_all(void) {
 }
 
 esp_err_t servos_release_all(void) {
-  uint8_t all[6] = {0, 1, 2, 3, 4, 5};
-  return servos_drop_batch(all, 6);
+  uint8_t all[16];
+  for (int i = 0; i < SERVO_COUNT; i++) all[i] = i;
+  return servos_drop_batch(all, SERVO_COUNT);
 }
 
 bool servos_is_held(uint8_t index) {
@@ -126,24 +125,18 @@ static void shuffle(uint8_t *arr, size_t n) {
 
 static void sequence_task(void *arg) {
   (void)arg;
-  uint8_t order[6] = {0, 1, 2, 3, 4, 5};
-  shuffle(order, 6);
+  uint8_t order[16];
+  for (int i = 0; i < SERVO_COUNT; i++) order[i] = i;
+  shuffle(order, SERVO_COUNT);
   state_save_sequence(order, 0);
 
   uint8_t i = 0;
-  while (i < 6) {
-    int batch = g_state.double_drop && i < 5 ? 2 : 1;
-    if (batch == 2) {
-      uint8_t pair[2] = {order[i], order[i + 1]};
-      servos_drop_batch(pair, 2);
-      i += 2;
-    } else {
-      servos_drop(order[i]);
-      i++;
-    }
+  while (i < SERVO_COUNT) {
+    servos_drop(order[i]);
+    i++;
     state_save_sequence(order, i);
     state_increment_drop_count();
-    if (i < 6) {
+    if (i < SERVO_COUNT) {
       uint32_t interval = state_get_drop_interval_ms(g_state.difficulty);
       vTaskDelay(pdMS_TO_TICKS(interval));
     }

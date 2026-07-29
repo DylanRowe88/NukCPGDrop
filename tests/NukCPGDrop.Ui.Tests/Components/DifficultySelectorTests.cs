@@ -19,10 +19,10 @@ public class DifficultySelectorTests : TestContext
     }
 
     [Fact]
-    public void DifficultySelector_RendersDoubleDropToggle()
+    public void DifficultySelector_RendersRandomToggle()
     {
         var cut = RenderComponent<DifficultySelector>(p => p
-            .Add(s => s.DoubleDrop, true)
+            .Add(s => s.RandomEnabled, true)
         );
 
         var checkbox = cut.Find("input[type='checkbox']");
