@@ -351,6 +351,7 @@ function renderReleaseTable(releases, installedMd5) {
     const { release, asset } = assetMap[tag];
     const tr = document.createElement('tr');
     tr.dataset.tag = tag;
+    tr.dataset.assetId = asset.id;
     tr.dataset.url = asset.browser_download_url;
 
     if (!selectedTag) selectedTag = tag;
@@ -422,8 +423,16 @@ async function handleFlash() {
   try {
     status('Downloading firmware bundle...', 'info');
 
-    const zipResp = await fetch(asset.browser_download_url);
-    if (!zipResp.ok) throw new Error('Download failed: HTTP ' + zipResp.status);
+    // Download via GitHub API (sends CORS headers, redirects to signed S3)
+    const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/assets/${asset.id}`;
+    let zipResp = await fetch(apiUrl, {
+      headers: { Accept: 'application/octet-stream' },
+    }).catch(() => null);
+    if (!zipResp || !zipResp.ok) {
+      // Fallback: direct download URL (may hit CORS but worth trying)
+      zipResp = await fetch(asset.browser_download_url).catch(() => null);
+    }
+    if (!zipResp || !zipResp.ok) throw new Error('Download failed: unable to reach release assets');
     const zipBlob = await zipResp.blob();
     const zip = await JSZip.loadAsync(zipBlob);
 
