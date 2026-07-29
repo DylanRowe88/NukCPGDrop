@@ -423,6 +423,25 @@ def flash_firmware(port, board_alias=None):
     if not bin_path.exists():
         fail(f"{bin_path} not found — run build first")
 
+    # Pre-flight check: verify board is reachable before attempting flash
+    try:
+        probe = subprocess.run(
+            [sys.executable, "-m", "esptool", "--chip", "esp32s3",
+             "--port", port, "--baud", "115200",
+             "--before", "default_reset", "flash_id"],
+            capture_output=True, text=True, timeout=10
+        )
+        if probe.returncode != 0:
+            fail(f"Board not reachable on {port} (esptool probe failed). "
+                 "Make sure it is connected and in normal boot mode.\n"
+                 f"  stderr: {probe.stderr.strip()}")
+        ok(f"Board detected on {port}")
+    except subprocess.TimeoutExpired:
+        fail(f"Board not reachable on {port} (timeout). "
+             "Make sure it is connected and in normal boot mode.")
+    except FileNotFoundError:
+        warn("esptool not found — skipping pre-flight check")
+
     is_native = port_vid(port) == 0x303A
     baud = 921600 if is_native else 460800
     flash_size = cfg["flash_size"]
