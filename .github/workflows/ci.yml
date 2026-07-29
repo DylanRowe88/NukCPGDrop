@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 env:
   DOTNET_VERSION: 8.0.x
@@ -29,10 +29,6 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - run: dotnet restore tests/NukCPGDrop.Ui.Tests/
       - run: dotnet test tests/NukCPGDrop.Ui.Tests/ -c Release --no-restore
-            /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
-      - uses: codecov/codecov-action@v4
-        with:
-          files: tests/NukCPGDrop.Ui.Tests/coverage.cobertura.xml
 
   build-and-embed:
     runs-on: ubuntu-latest
@@ -49,15 +45,13 @@ jobs:
 
       - name: Generate version
         id: version
-        run: |
-          DATE_TAG=$(date -u +'%Y%m%d')
-          RUN_NUM=${{ github.run_number }}
-          echo "version=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+        run: echo "version=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
 
-      - name: Build and publish Blazor WASM
-        run: |
-          dotnet publish ui/NukCPGDrop.Ui/ -c Release -o publish/wwwroot
-          python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
+      - name: Build Blazor WASM
+        run: dotnet publish ui/NukCPGDrop.Ui/ -c Release -o publish/wwwroot
+
+      - name: Embed web assets
+        run: python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
 
       - name: Build ESP-IDF firmware
         uses: espressif/esp-idf-github-action@v1
@@ -67,23 +61,10 @@ jobs:
           path: firmware/
           command: idf.py build
 
-      - name: Create firmware bundle
+      - name: Bundle firmware
         run: |
-          mkdir -p bundle
-          cp firmware/build/bootloader/bootloader.bin bundle/
-          cp firmware/build/partition_table/partition-table.bin bundle/
-          cp firmware/build/NukCPGDrop.bin bundle/
-          python -c "
-import hashlib, json, os
-files = []
-for f in ['bootloader.bin', 'partition-table.bin', 'NukCPGDrop.bin']:
-    path = f'bundle/{f}'
-    data = open(path, 'rb').read()
-    md5 = hashlib.md5(data).hexdigest()
-    files.append({'name': f, 'size': len(data), 'md5': md5})
-with open('bundle/manifest.json', 'w') as m:
-    json.dump({'version': '${{ steps.version.outputs.version }}', 'files': files}, m, indent=2)
-cd bundle && zip -r ../NukCPGDrop-Display-${{ steps.version.outputs.version }}.zip .
+          VERSION="v1.0.${{ github.run_number }}"
+          python scripts/create-firmware-bundle.py firmware/build "NukCPGDrop-Display-${VERSION}.zip" --version "$VERSION"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -91,13 +72,12 @@ cd bundle && zip -r ../NukCPGDrop-Display-${{ steps.version.outputs.version }}.z
           path: NukCPGDrop-Display-*.zip
 
   create-release:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     needs: [build-and-embed, ui-test, ui-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: firmware-bundle

@@ -6,7 +6,7 @@ Usage:
     python scripts/create-firmware-bundle.py firmware/build NukCPGDrop-Display-v1.0.0.zip
 """
 
-import argparse, hashlib, json, os, zipfile
+import argparse, hashlib, json, os, sys, zipfile
 from pathlib import Path
 
 BINARY_MANIFEST = [
@@ -63,5 +63,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import sys
     main()
