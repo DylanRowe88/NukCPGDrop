@@ -8,6 +8,7 @@
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
+#include "nvs_flash.h"
 #include <string.h>
 
 static const char *TAG = "wifi_mgr";
@@ -88,6 +89,13 @@ static void event_handler(void *arg, esp_event_base_t event_base,
 
 esp_err_t wifi_sta_connect(const char *ssid) {
   s_wifi_event_group = xEventGroupCreate();
+
+  esp_err_t nvs_ret = nvs_flash_init();
+  if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    nvs_ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(nvs_ret);
 
   wifi_common_init();
 
