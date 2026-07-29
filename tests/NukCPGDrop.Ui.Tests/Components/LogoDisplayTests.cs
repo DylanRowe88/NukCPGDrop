@@ -17,6 +17,6 @@ public class LogoDisplayTests : TestContext
     public void LogoDisplay_RendersRestBar()
     {
         var cut = RenderComponent<LogoDisplay>();
-        Assert.Contains("REST WHEN YOU'RE DEAD", cut.Markup);
+        Assert.Contains("Rest when you're dead", cut.Markup);
     }
 }

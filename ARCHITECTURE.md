@@ -290,7 +290,7 @@ hardware E2E test (graceful skip without BOARD_TYPE)
 |------|---------|
 | `firmware/main/main.c` | App init, E2E test mode, task bootstrap |
 | `firmware/main/pca9685.c` | I2C PCA9685 driver |
-| `firmware/main/servos.c` | Servo abstraction, direction-aware via `g_state.servo_dir[]` |
+| `firmware/main/servos.c` | Servo abstraction, direction-aware via `g_state.servo_dir[]`, `servos_start_sequence()` for timed drops |
 | `firmware/main/state.c` | NVS persistence + battery + servo config |
 | `firmware/main/web_server.c` | HTTP + REST + captive portal + file serving + audio/SD test endpoints |
 | `firmware/main/wifi_manager.c` | WiFi AP + STA mode + per-client list API |

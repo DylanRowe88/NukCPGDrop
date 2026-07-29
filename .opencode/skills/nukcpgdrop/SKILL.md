@@ -31,15 +31,21 @@ Board selection via `CONFIG_BOARD_DISPLAY` / `CONFIG_BOARD_DEVKITC` in Kconfig (
 | `firmware/main/main.c` | App init, task creation |
 | `firmware/main/web_server.c` | HTTP/REST/captive portal/file serving + audio/SD test endpoints |
 | `firmware/main/wifi_manager.c` | WiFi AP + STA mode (E2E test) |
-| `firmware/main/servos.c` | Servo control via PCA9685, reads `g_state.servo_dir[]` for direction |
-| `firmware/main/state.c` | NVS state persistence + battery ADC |
-| `firmware/components/lvgl_porting/lv_port_disp.c` | ILI9341 SPI display driver + FT6336G touch |
-| `firmware/components/dashboard_ui/screen_main.c` | LVGL dashboard (scrollable, 520px content) |
-| `firmware/components/audio/` | ES8311 I2S audio codec driver |
-| `ui/NukCPGDrop.Ui/` | Blazor WebAssembly captive portal dashboard |
+| `firmware/main/servos.c` | Servo control via PCA9685, direction-aware via `g_state.servo_dir[]`, `servos_start_sequence()` for timed drops |
+| `firmware/main/state.c` | NVS state persistence + battery ADC + servo config (dir, min/max) |
+| `firmware/components/lvgl_porting/lv_port_disp.c` | ILI9341 full init (0x21 inversion, MADCTL=0x08) + FT6336G touch via `esp_lcd_touch_ft5x06` |
+| `firmware/components/dashboard_ui/screen_main.c` | LVGL dashboard (scrollable, 900px content), dynamic action button, servo direction toggles, RSSI bars, mic level bar |
+| `firmware/components/dashboard_ui/dashboard.c` | Dashboard update task, mic peak level via I2S |
+| `firmware/components/audio/es8311.c` | ES8311 full init (HP drive, EQ bypass, volume 85) |
+| `firmware/components/audio/i2s_audio.c` | I2S Philips stereo, MCLK_MULTIPLE_384, DIN=6 for mic |
+| `ui/NukCPGDrop.Ui/` | Blazor WASM captive portal dashboard (Index + Debug pages) |
+| `ui/NukCPGDrop.Ui/Components/LogoDisplay.razor` | Scrolling art marquee with possum image + "Rest when you're dead" text |
+| `ui/NukCPGDrop.Ui/Components/DropStatus.razor` | Can grid with tap-to-toggle |
+| `ui/NukCPGDrop.Ui/Components/RangeSlider.razor` | Dual-knob range slider for servo calibration |
+| `tests/NukCPGDrop.Ui.Tests/Components/LogoDisplayTests.cs` | bUnit tests for LogoDisplay rendering |
 | `firmware/partitions.csv` | 16MB partition table (DisplayBoard) |
 | `firmware/partitions-8mb.csv` | 8MB partition table (DevKitC/E2E) |
-| `firmware/sdkconfig.defaults` | DisplayBoard default config |
+| `firmware/sdkconfig.defaults` | DisplayBoard default config (LV_COLOR_16_SWAP=y) |
 | `firmware/sdkconfig.defaults.e2e` | E2E test config (DevKitC + WiFi STA) |
 
 ## Build Pipeline
@@ -57,11 +63,14 @@ python flash.py --identify
 # Register a new board
 python flash.py --register-alias MyName
 
-# Step by step:
-dotnet publish ui/NukCPGDrop.Ui/ -c Release
-python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
-cd firmware && idf.py build
-python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash ...
+# flash.py now runs a pre-flight board detection check (esptool flash_id)
+# before writing, and fails with a clear error if the board isn't reachable:
+
+# Step by step (not recommended — use flash.py):
+# dotnet publish ui/NukCPGDrop.Ui/ -c Release
+# python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
+# cd firmware && idf.py build
+# python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash ...
 ```
 
 ## DisplayBoard Pinout (ILI9341 + FT6336G + ES8311)
@@ -99,7 +108,7 @@ I2C address `0x38`, compatible with FT5x06 driver (`esp_lcd_touch_ft5x06`). Conn
 
 ## Audio (ES8311)
 
-I2S codec on MCLK=4, BCK=5, WS=7, DOUT=8, DIN=6. I2C config at `0x18`. Amplifier enable on GPIO1. Audio test via `POST /api/test/audio` (plays 1kHz sine, reads mic, returns peak/energy).
+I2S codec on MCLK=4, BCK=5, WS=7, DOUT=8, DIN=6. I2C config at `0x18`. Amplifier enable on GPIO1. Uses Philips format, stereo, `MCLK_MULTIPLE_384`. Full init sequence: power up analog, enable HP drive, bypass EQ, set volume 85. Audio test via `POST /api/test/audio` (plays 1kHz sine, reads mic, returns peak/energy).
 
 ## E2E Test Firmware
 
@@ -142,6 +151,12 @@ Add handler function and URI entry in `firmware/main/web_server.c` (api_uris arr
 
 ### Debug touch controller
 Add `ESP_LOGI("touch", ...)` in `touch_read_cb()` in `lv_port_disp.c`. Check serial for `points=`, `x=`, `y=` values. Touch coordinates are polled by LVGL's indev timer (every ~33ms).
+
+### Fix LVGL drop button (not starting sequence)
+The LVGL action button in `screen_main.c` calls `servos_start_sequence()` which creates a `drop_seq` task. If it doesn't work, check that `servos.c` has `servos_start_sequence()` defined and that `screen_main.c` calls it when all cans are held. The web server drop endpoint calls `audio_play_prompt()` and creates `sequence_task`.
+
+### Fix speaker clicks / no audio
+Check `es8311.c` for the full init sequence (HP drive at REG13=0x10, EQ bypass at REG1C=0x6A, volume at REG38=0x55). Check `i2s_audio.c` uses Philips format, stereo mode, and `MCLK_MULTIPLE_384`. The amplifier enable GPIO1 must be set high.
 
 ### Add servo to state
 Extend `nukcpgdrop_state_t` in `state.h`, add defaults in `state.c`, expose in API, save via `state_save()`.
