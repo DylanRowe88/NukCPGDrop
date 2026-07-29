@@ -80,21 +80,21 @@ function formatETA(ms) {
 
 function buildMarquee() {
   const track = document.querySelector('.marquee-track');
-  if (!track) return;
+  if (!track || track.children.length === 0) return;
   const vw = window.innerWidth;
-  // Each item (img + text) is ~300px wide (img: 56px + margins + text ~150px)
   const itemWidth = 300;
-  const itemsNeeded = Math.ceil(vw / itemWidth) * 2 + 4; // 2x for smooth loop
-  const existing = track.children.length;
-  if (existing >= itemsNeeded) return;
-  // Clone what we have until we have enough
-  const clones = [];
-  while (track.children.length < itemsNeeded) {
-    for (let i = 0; i < existing && track.children.length < itemsNeeded; i++) {
-      clones.push(track.children[i].cloneNode(true));
+  const pairsNeeded = Math.ceil(vw / itemWidth) + 2; // +2 for margin
+  const pairCount = track.children.length / 2; // each pair = img + text
+  if (pairCount >= pairsNeeded) return;
+  const template = [];
+  for (let i = 0; i < track.children.length; i++) {
+    template.push(track.children[i].cloneNode(true));
+  }
+  for (let p = pairCount; p < pairsNeeded; p++) {
+    for (const el of template) {
+      track.appendChild(el.cloneNode(true));
     }
   }
-  for (const c of clones) track.appendChild(c);
 }
 
 /* ── Port / Connect ── */
