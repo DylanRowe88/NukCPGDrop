@@ -109,10 +109,14 @@ async function connectToPort(port) {
   state.port = port;
   const transport = new Transport(port, true);
   state.transport = transport;
+  // Disable esptool-js debug/TRACE logging
+  if (window.ESPLoader) window.ESPLoader.debug = false;
   const loader = new ESPLoader({
-    transport, baudrate: 115200,
+    transport, baudrate: 115200, debug: false,
     terminal: { clean: () => {}, writeLine: () => {}, write: () => {} },
   });
+  // Suppress the internal logger's TRACE output
+  if (loader.logger) loader.logger.level = 'error';
   state.loader = loader;
 
   status('Detecting chip...', 'info');
@@ -438,7 +442,18 @@ async function handleFlash() {
         els['verify-progress-label'].textContent = verified ? 'Verified OK' : 'Verification done';
       } catch { verified = false; }
 
-          // Hard reset to release from download mode
+          // Reset chip out of download mode (USB-JTAG needs setSignals)
+      try {
+        // Tell chip to boot from flash
+        await state.loader.after('hard_reset').catch(() => {});
+        // For USB-JTAG, also toggle DTR/RTS via WebSerial API
+        if (state.port && state.port.setSignals) {
+          await state.port.setSignals({ dataTerminalReady: false, requestToSend: true });
+          await new Promise(r => setTimeout(r, 50));
+          await state.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+        }
+      } catch {}
+      try { await state.transport.disconnect(); } catch {}
       state.loader = null; state.transport = null; state.port = null;
 
       await showSuccess(verified, baud, totalSize);
