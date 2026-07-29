@@ -1,85 +1,25 @@
-# ESP-IDF
-firmware/build/
-firmware/build_devkitc/
-firmware/build_*/
-firmware/sdkconfig
-firmware/sdkconfig.old
-firmware/dependencies.lock
-firmware/managed_components/
-
-# Third-party ESP-IDF components (full library copies)
-firmware/components/lvgl/
-firmware/components/lvgl_esp32_drivers/
-
-# .NET
-ui/**/bin/
-ui/**/obj/
-ui/**/*.user
-ui/**/.vs/
-tests/**/bin/
-tests/**/obj/
-tests/**/*.user
-tests/**/.vs/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-scripts/__pycache__/
-
-# Node
-ui/NukCPGDrop.Ui/wwwroot/js/*.bundle.js
-node_modules/
-
+# Build artifacts
+NukCPGDrop-Display-*.zip
+*.zip
+*.bin
 # IDE
-.vs/
-.vscode/settings.json
-.vscode/launch.json
-.vscode/tasks.json
+.vscode/
+.idea/
 *.swp
-*.swo
-*~
-
 # OS
 .DS_Store
 Thumbs.db
-*.~
-
-# .NET local tools
-.config/
-
-# Build artifacts
+# Build outputs
 publish/
-
-# PlatformIO
-firmware/.pio/
-
-# Generated embed binary stubs (data is inline in web_assets.h)
-firmware/main/include/gz_*
-
-# Pre-commit
-.pre-commit-config.yaml.bak
-
-# Coverage
-coverage/
-*.coverage
-*.coveragexml
-*.lcov
-*.gcda
-*.gcno
-*.gcov
-
-# Mutation testing
-StrykerOutput/
-Reports/
-
-# QEMU emulator
-.qemu/
-
-# QEMU emulator
-.qemu/
-
+firmware/build/
+firmware/build_devkitc/
 node_modules/
-
+.qemu/
+.e2e-perf.json
+# SDK config
+firmware/sdkconfig
+firmware/sdkconfig.old
+# Board example code (not project docs)
 docs/2.8inch ESP32-S3 Display/
-docs/2.8inch ESP32-S3 Display.zip
+docs/datasheets/
+docs/flash/
