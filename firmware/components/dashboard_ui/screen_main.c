@@ -212,6 +212,8 @@ static void create_can_grid(lv_obj_t *parent) {
 
   create_section_label(parent, "Cans", 44);
 
+  uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+  if (n > SERVO_COUNT) n = SERVO_COUNT;
   for (int i = 0; i < SERVO_COUNT; i++) {
     int row = i / cols;
     int col = i % cols;
@@ -225,6 +227,8 @@ static void create_can_grid(lv_obj_t *parent) {
     lv_obj_set_user_data(btn, (void *)(intptr_t)i);
     lv_obj_add_event_cb(btn, can_tap_cb, LV_EVENT_CLICKED, NULL);
     can_indicators[i] = btn;
+    if (i >= n)
+      lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, "HELD");
@@ -576,20 +580,32 @@ esp_err_t screen_main_create(void) {
 lv_obj_t *screen_main_get(void) { return main_screen; }
 
 void screen_main_update_indicators(void) {
+  uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+  if (n > SERVO_COUNT) n = SERVO_COUNT;
   for (int i = 0; i < SERVO_COUNT; i++) {
-    bool held = servos_is_held((uint8_t)i);
-    set_can_color((uint8_t)i, held);
+    bool hidden = (i >= n);
+    if (can_indicators[i]) {
+      if (hidden)
+        lv_obj_add_flag(can_indicators[i], LV_OBJ_FLAG_HIDDEN);
+      else
+        lv_obj_clear_flag(can_indicators[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!hidden) {
+      bool held = servos_is_held((uint8_t)i);
+      set_can_color((uint8_t)i, held);
+    }
   }
 }
 
 void screen_main_update_progress(void) {
+  uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+  if (n > SERVO_COUNT) n = SERVO_COUNT;
   uint32_t completed = g_state.last_completed;
-  if (completed > (uint32_t)SERVO_COUNT)
-    completed = SERVO_COUNT;
-  lv_bar_set_range(progress_bar, 0, SERVO_COUNT);
+  if (completed > n) completed = n;
+  lv_bar_set_range(progress_bar, 0, n);
   lv_bar_set_value(progress_bar, completed, LV_ANIM_ON);
   char buf[8];
-  lv_snprintf(buf, sizeof(buf), "%lu/%d", completed, SERVO_COUNT);
+  lv_snprintf(buf, sizeof(buf), "%lu/%d", completed, n);
   lv_label_set_text(progress_label, buf);
 }
 

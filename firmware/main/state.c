@@ -51,6 +51,7 @@ defaults:
   g_state.sound_enabled = true;
   g_state.sv_start_pos = 0;
   g_state.sv_stop_pos = 180;
+  g_state.active_servos = 16;
   return ESP_OK;
 }
 

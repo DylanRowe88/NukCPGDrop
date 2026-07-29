@@ -79,6 +79,7 @@ public class ApiService
                 sound_enabled = config.SoundEnabled,
                 sv_start_pos = config.SvStartPos,
                 sv_stop_pos = config.SvStopPos,
+                active_servos = config.ActiveServos,
             });
             return response.IsSuccessStatusCode;
         }

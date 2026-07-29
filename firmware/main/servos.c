@@ -125,18 +125,20 @@ static void shuffle(uint8_t *arr, size_t n) {
 
 static void sequence_task(void *arg) {
   (void)arg;
+  uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+  if (n > SERVO_COUNT) n = SERVO_COUNT;
   uint8_t order[16];
-  for (int i = 0; i < SERVO_COUNT; i++) order[i] = i;
-  shuffle(order, SERVO_COUNT);
+  for (int i = 0; i < n; i++) order[i] = i;
+  shuffle(order, n);
   state_save_sequence(order, 0);
 
   uint8_t i = 0;
-  while (i < SERVO_COUNT) {
+  while (i < n) {
     servos_drop(order[i]);
     i++;
     state_save_sequence(order, i);
     state_increment_drop_count();
-    if (i < SERVO_COUNT) {
+    if (i < n) {
       uint32_t interval = state_get_drop_interval_ms(g_state.difficulty);
       vTaskDelay(pdMS_TO_TICKS(interval));
     }

@@ -29,6 +29,7 @@ typedef struct {
   bool sound_enabled;
   uint16_t sv_start_pos;
   uint16_t sv_stop_pos;
+  uint8_t active_servos;
 } nukcpgdrop_state_t;
 
 extern nukcpgdrop_state_t g_state;

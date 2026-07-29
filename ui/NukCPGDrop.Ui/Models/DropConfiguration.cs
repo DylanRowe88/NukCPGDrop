@@ -68,6 +68,9 @@ public class SystemStatus
 
     [JsonPropertyName("sound_enabled")]
     public bool SoundEnabled { get; set; } = true;
+
+    [JsonPropertyName("active_servos")]
+    public int ActiveServos { get; set; } = 16;
 }
 
 public class DropConfiguration
@@ -79,6 +82,7 @@ public class DropConfiguration
     public int RangeMax { get; set; } = 2000;
     public int SvStartPos { get; set; } = 0;
     public int SvStopPos { get; set; } = 180;
+    public int ActiveServos { get; set; } = 16;
     public bool SoundEnabled { get; set; } = true;
 }
 

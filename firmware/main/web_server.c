@@ -54,22 +54,24 @@ static void shuffle_array(uint8_t *arr, size_t n) {
 
 static void drop_sequence_task(void *arg) {
   ensure_servo_sem();
+  uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+  if (n > SERVO_COUNT) n = SERVO_COUNT;
   uint8_t order[16];
-  for (int i = 0; i < SERVO_COUNT; i++) order[i] = i;
-  shuffle_array(order, SERVO_COUNT);
+  for (int i = 0; i < n; i++) order[i] = i;
+  shuffle_array(order, n);
   state_save_sequence(order, 0);
 
   uint32_t interval = state_get_drop_interval_ms(g_state.difficulty);
   uint8_t i = 0;
 
-  while (i < SERVO_COUNT) {
+  while (i < n) {
     xSemaphoreTake(g_servo_sem, portMAX_DELAY);
     servos_drop(order[i]);
     i++;
     state_save_sequence(order, i);
     state_increment_drop_count();
 
-    if (i < SERVO_COUNT) {
+    if (i < n) {
       if (g_state.difficulty == DIFFICULTY_RANDOM)
         interval = state_get_drop_interval_ms(DIFFICULTY_RANDOM);
       vTaskDelay(pdMS_TO_TICKS(interval));
@@ -88,7 +90,9 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(root, "drop_count", g_state.drop_count);
 
   cJSON *held = cJSON_CreateArray();
-  for (int i = 0; i < SERVO_COUNT; i++)
+  uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+  if (n > SERVO_COUNT) n = SERVO_COUNT;
+  for (int i = 0; i < n; i++)
     cJSON_AddItemToArray(held, cJSON_CreateBool(servos_is_held(i)));
   cJSON_AddItemToObject(root, "held", held);
 
@@ -99,6 +103,7 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON_AddBoolToObject(root, "sound_enabled", g_state.sound_enabled);
   cJSON_AddNumberToObject(root, "sv_start_pos", g_state.sv_start_pos);
   cJSON_AddNumberToObject(root, "sv_stop_pos", g_state.sv_stop_pos);
+  cJSON_AddNumberToObject(root, "active_servos", g_state.active_servos);
 
   led_color_t lc;
   led_get_color(&lc);
@@ -115,8 +120,8 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON *client_arr = cJSON_CreateArray();
   uint8_t macs[6 * 8];
   int rssis[8];
-  int n = wifi_ap_get_sta_list(macs, rssis, 8);
-  for (int i = 0; i < n; i++) {
+  int n_clients = wifi_ap_get_sta_list(macs, rssis, 8);
+  for (int i = 0; i < n_clients; i++) {
     cJSON *c = cJSON_CreateObject();
     char mac_str[18];
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -158,7 +163,8 @@ static esp_err_t api_hold_handler(httpd_req_t *req) {
   cJSON *id_item = cJSON_GetObjectItem(json, "id");
   if (cJSON_IsNumber(id_item)) {
     uint8_t id = (uint8_t)id_item->valuedouble;
-    if (id >= 1 && id <= SERVO_COUNT) {
+    uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+    if (id >= 1 && id <= n) {
       ensure_servo_sem();
       xSemaphoreTake(g_servo_sem, portMAX_DELAY);
       servos_set(id - 1, SERVO_POSITION_HOLD);
@@ -195,7 +201,8 @@ static esp_err_t api_drop_handler(httpd_req_t *req) {
   cJSON *id_item = cJSON_GetObjectItem(json, "id");
   if (cJSON_IsNumber(id_item)) {
     uint8_t id = (uint8_t)id_item->valuedouble;
-    if (id >= 1 && id <= SERVO_COUNT) {
+    uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+    if (id >= 1 && id <= n) {
       ensure_servo_sem();
       xSemaphoreTake(g_servo_sem, portMAX_DELAY);
       servos_drop(id - 1);
@@ -259,6 +266,10 @@ static esp_err_t api_config_handler(httpd_req_t *req) {
   cJSON *sv_stp = cJSON_GetObjectItem(json, "sv_stop_pos");
   if (cJSON_IsNumber(sv_stp))
     g_state.sv_stop_pos = (uint16_t)sv_stp->valuedouble;
+
+  cJSON *act_serv = cJSON_GetObjectItem(json, "active_servos");
+  if (cJSON_IsNumber(act_serv))
+    g_state.active_servos = (uint8_t)act_serv->valuedouble;
 
   state_save();
   cJSON_Delete(json);
