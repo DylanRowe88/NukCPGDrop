@@ -49,6 +49,8 @@ static lv_obj_t *led_indicator = NULL;
 static lv_obj_t *sound_switch = NULL;
 static lv_obj_t *client_count_label = NULL;
 static lv_obj_t *audio_bar = NULL;
+#define AUDIO_BINS 8
+static lv_obj_t *audio_bins[AUDIO_BINS] = {NULL};
 static lv_obj_t *pca9685_label = NULL;
 
 static void action_btn_cb(lv_event_t *e) {
@@ -369,14 +371,25 @@ static void create_sound_toggle(lv_obj_t *parent) {
 
 static void create_audio_level(lv_obj_t *parent) {
   int y = 48 + 4 * 50 + 4 + 18 + 40 + 12 + 18 + 24 + 24 + 16 + 18 + 24 + 24 + 8 + 18 + 36 + 16 + 18 + 34 + 16 + 18 + 24 + 16;
-  create_section_label(parent, "Mic Level", y);
+  create_section_label(parent, "Mic Spectrum", y);
 
-  audio_bar = lv_bar_create(parent);
-  lv_obj_set_size(audio_bar, 224, 16);
-  lv_obj_set_pos(audio_bar, 8, y + 18);
-  lv_bar_set_range(audio_bar, 0, 4096);
-  lv_obj_set_style_bg_color(audio_bar, lv_color_hex(0x333333), LV_STATE_DEFAULT);
-  lv_obj_set_style_radius(audio_bar, 4, LV_STATE_DEFAULT);
+  int bar_w = 24, bar_gap = 4, bar_h = 40;
+  int start_x = (SCREEN_W - (AUDIO_BINS * (bar_w + bar_gap) - bar_gap)) / 2;
+  int by = y + 18;
+  for (int i = 0; i < AUDIO_BINS; i++) {
+    audio_bins[i] = lv_bar_create(parent);
+    lv_obj_set_size(audio_bins[i], bar_w, bar_h);
+    lv_obj_set_pos(audio_bins[i], start_x + i * (bar_w + bar_gap), by);
+    lv_bar_set_range(audio_bins[i], 0, 4096);
+    lv_obj_set_style_bg_color(audio_bins[i], lv_color_hex(0x222222), LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(audio_bins[i], 2, LV_STATE_DEFAULT);
+    lv_obj_set_style_anim_time(audio_bins[i], 100, LV_STATE_DEFAULT);
+    lv_color_t c;
+    if (i < 3) c = lv_color_hex(0x28a745);
+    else if (i < 6) c = lv_color_hex(0xe6a700);
+    else c = lv_color_hex(0xe63946);
+    lv_obj_set_style_bg_color(audio_bins[i], c, LV_PART_INDICATOR);
+  }
 }
 
 static void create_status_line(lv_obj_t *parent) {
@@ -510,8 +523,19 @@ void screen_main_update_rssi(int rssi) {
 }
 
 void screen_main_update_audio_level(int level) {
+  // Legacy single-bar fallback
   if (audio_bar) {
     lv_bar_set_value(audio_bar, level > 4096 ? 4096 : level, LV_ANIM_OFF);
+  }
+}
+
+void screen_main_update_audio_spectrum(const int *bins, int count) {
+  for (int i = 0; i < AUDIO_BINS && i < count; i++) {
+    if (audio_bins[i]) {
+      int val = bins[i];
+      if (val > 4096) val = 4096;
+      lv_bar_set_value(audio_bins[i], val, LV_ANIM_ON);
+    }
   }
 }
 

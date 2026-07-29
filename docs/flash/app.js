@@ -109,14 +109,18 @@ async function connectToPort(port) {
   state.port = port;
   const transport = new Transport(port, true);
   state.transport = transport;
-  // Disable esptool-js debug/TRACE logging
-  if (window.ESPLoader) window.ESPLoader.debug = false;
+  // Suppress esptool-js TRACE debug output
+  // Suppress esptool-js TRACE debug by filtering out binary-hex logs
+  const origDebug = console.debug;
+  console.debug = function() {
+    const msg = arguments[0] || '';
+    if (typeof msg === 'string' && (msg.startsWith('TRACE') || msg.includes('bytes:'))) return;
+    origDebug.apply(console, arguments);
+  };
   const loader = new ESPLoader({
-    transport, baudrate: 115200, debug: false,
+    transport, baudrate: 115200,
     terminal: { clean: () => {}, writeLine: () => {}, write: () => {} },
   });
-  // Suppress the internal logger's TRACE output
-  if (loader.logger) loader.logger.level = 'error';
   state.loader = loader;
 
   status('Detecting chip...', 'info');
@@ -175,6 +179,11 @@ async function connectToPort(port) {
     clearStatus();
   }
   state.installedMd5 = installedMd5;
+  if (installedMd5) {
+    els['current-fw-version'].textContent = 'MD5: ' + installedMd5.slice(0, 16) + '...';
+  } else {
+    els['current-fw-version'].textContent = 'Unknown';
+  }
 
   await fetchReleases(installedMd5);
 }

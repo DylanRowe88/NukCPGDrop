@@ -9,4 +9,5 @@ void screen_main_update_status(void);
 void screen_main_update_battery(void);
 void screen_main_update_rssi(int rssi);
 void screen_main_update_audio_level(int level);
+void screen_main_update_audio_spectrum(const int *bins, int count);
 void screen_main_set_seq_running(bool running);

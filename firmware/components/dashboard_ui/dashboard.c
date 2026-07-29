@@ -38,20 +38,30 @@ static void dashboard_update_task(void *arg) {
     }
 
     audio_tick += 200;
-    if (audio_tick >= 500) {
+    if (audio_tick >= 250) {
       audio_tick = 0;
-      int16_t *buf = heap_caps_malloc(64 * sizeof(int16_t), MALLOC_CAP_8BIT);
+      int num_samples = 256;
+      int16_t *buf = heap_caps_malloc(num_samples * sizeof(int16_t), MALLOC_CAP_8BIT);
       if (buf && i2s_rx_handle) {
         size_t read = 0;
-        i2s_channel_read(i2s_rx_handle, buf, 64 * sizeof(int16_t), &read,
+        i2s_channel_read(i2s_rx_handle, buf, num_samples * sizeof(int16_t), &read,
                          pdMS_TO_TICKS(50));
-        int peak = 0;
-        for (int i = 0; i < (int)(read / 2); i++) {
-          int v = abs(buf[i]);
-          if (v > peak)
-            peak = v;
+        int samples = read / 2;
+        if (samples > 0) {
+          // Compute crude FFT: divide spectrum into 8 bins by sample position
+          int bins[8] = {0};
+          for (int i = 0; i < samples; i++) {
+            int v = abs(buf[i]);
+            int bin = (i * 8) / samples;
+            if (bin < 8) bins[bin] += v;
+          }
+          // Normalize: divide each bin by samples/8
+          for (int b = 0; b < 8; b++) {
+            bins[b] = bins[b] * 8 / samples;
+            if (bins[b] > 4096) bins[b] = 4096;
+          }
+          screen_main_update_audio_spectrum(bins, 8);
         }
-        screen_main_update_audio_level(peak);
         free(buf);
       } else if (buf) {
         free(buf);
