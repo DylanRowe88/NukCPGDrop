@@ -155,7 +155,7 @@ async function connectToPort(port) {
 
   const [desc, mac, revision] = await Promise.all([
     loader.chip.getChipDescription(loader).catch(() => chipName),
-    loader.readMac().catch(() => ''),
+    loader.chip.readMac(loader).catch(() => ''),
     loader.chip.getChipRevision(loader).catch(() => -1),
   ]);
   state.chipDesc = desc;

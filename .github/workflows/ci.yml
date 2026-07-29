@@ -29,65 +29,25 @@ jobs:
       - run: dotnet restore tests/NukCPGDrop.Ui.Tests/
       - run: dotnet test tests/NukCPGDrop.Ui.Tests/ -c Release --no-restore
 
-  build-and-embed:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Generate version
-        id: version
-        run: echo "version=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
-
-      - name: Build Blazor WASM
-        run: dotnet publish ui/NukCPGDrop.Ui/ -c Release -o publish/wwwroot
-
-      - name: Embed web assets
-        run: python scripts/embed-web.py publish/wwwroot/ firmware/main/include/web_assets.h
-
-      - name: Build ESP-IDF firmware
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.2
-          target: esp32s3
-          path: firmware/
-          command: idf.py build
-
-      - name: Bundle firmware
-        run: |
-          VERSION="v1.0.${{ github.run_number }}"
-          python scripts/create-firmware-bundle.py firmware/build "NukCPGDrop-Display-${VERSION}.zip" --version "$VERSION"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: firmware-bundle
-          path: NukCPGDrop-Display-*.zip
-
-  create-release:
+  draft-release:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    needs: [build-and-embed, ui-test, ui-lint]
+    needs: [ui-test, ui-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: firmware-bundle
+      - uses: actions/checkout@v4
 
-      - name: Create Release
+      - name: Create Draft Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ needs.build-and-embed.outputs.version }}"
-          BUNDLE="NukCPGDrop-Display-${VERSION}.zip"
+          VERSION="v1.0.${{ github.run_number }}"
           gh release create "$VERSION" \
             --title "NukCPGDrop $VERSION" \
-            --notes "Automated firmware build from commit ${{ github.sha }}" \
-            "$BUNDLE"
+            --notes "Build firmware locally with:
+  python flash.py --board DisplayBoard
+
+Then upload the bundle with:
+  gh release upload $VERSION NukCPGDrop-Display-${VERSION}.zip" \
+            --draft
