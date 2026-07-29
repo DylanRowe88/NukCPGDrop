@@ -12,7 +12,10 @@
 #include "freertos/task.h"
 #include "led.h"
 #include "pca9685.h"
+#if CONFIG_BOARD_DISPLAY
 #include "sdmmc_cmd.h"
+#include "driver/sdmmc_host.h"
+#endif
 #include "servos.h"
 #include "state.h"
 #include "web_assets.h"

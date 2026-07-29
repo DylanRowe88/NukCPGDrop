@@ -152,7 +152,20 @@ idf.py build                   →  firmware/build/NukCPGDrop.bin (~4.7 MB)
 
 ---
 
-## Flashing (flash.py)
+## Flashing
+
+### WebSerial browser flasher (end users)
+
+The `docs/flash/` directory contains a standalone HTML/JS page that uses
+[esptool-js](https://github.com/espressif/esptool-js) and WebSerial to flash
+firmware directly from the browser. Served via GitHub Pages at
+[dylanrowe88.github.io/NukCPGDrop/flash/](https://dylanrowe88.github.io/NukCPGDrop/flash/).
+No Python, ESP-IDF, or .NET required — just Chrome or Edge.
+
+The page fetches firmware bundles from GitHub Releases, displays available
+versions, and guides the user through connect → select → flash → verify.
+
+### CLI flasher (development)
 
 MAC-address-based board detection — no COM port guessing:
 
@@ -168,6 +181,22 @@ python flash.py --board E2EBoard           # matches MAC D8:3B:DA:76:23:28
 
 Aliases stored in `.board_aliases.json`. Script verifies the MAC matches before
 flashing, preventing accidental cross-flashing.
+
+### Publishing a release
+
+The pre-push hook automatically creates a firmware bundle zip after every push.
+To publish a new release:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+gh release create v1.1.0 ./NukCPGDrop-Display-v1.1.0.zip --title "v1.1.0"
+```
+
+The bundle zip includes `bootloader.bin`, `partition-table.bin`, `NukCPGDrop.bin`,
+`ota_data_initial.bin`, and a `manifest.json` with MD5 checksums. The WebSerial
+page fetches these releases via the GitHub API and handles download + extraction
+client-side.
 
 ---
 
@@ -207,7 +236,7 @@ check-yaml → check-added-large-files → check-merge-conflict
 ### Pre-push hooks (adds)
 
 ```
-idf.py test (QEMU) → npm run test:e2e
+idf.py test (QEMU) → npm run test:e2e → create-firmware-bundle
 ```
 
 ---
@@ -230,6 +259,8 @@ idf.py test (QEMU) → npm run test:e2e
 | `scripts/embed-web.py` | WASM → C header converter |
 | `scripts/board_config.py` | MAC alias registry |
 | `flash.py` | Build + flash + verify + E2E |
+| `docs/flash/` | WebSerial browser flasher (GitHub Pages) |
+| `scripts/create-firmware-bundle.py` | Package build output into release zip |
 | `tests/e2e/firmware.test.js` | Playwright + Mocha E2E tests |
 | `tests/e2e/qemu.js` | QEMU process manager |
 | `docs/MIGRATION_PLAN.md` | Board migration plan |

@@ -5,6 +5,14 @@ in random sequence. ESP32-S3 with captive portal web UI + 2.8" touch display.
 
 ## Quick Start
 
+### Flash via browser (no install)
+
+Open [dylanrowe88.github.io/NukCPGDrop/flash/](https://dylanrowe88.github.io/NukCPGDrop/flash/)
+in Chrome or Edge, connect your ESP32-S3, select a firmware version, and flash.
+Uses WebSerial + esptool-js. No Python, no ESP-IDF, no .NET needed.
+
+### Flash via command line
+
 ```bash
 # Flash to DisplayBoard (auto-detects by MAC address)
 python flash.py --board DisplayBoard
