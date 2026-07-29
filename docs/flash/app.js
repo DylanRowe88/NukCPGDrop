@@ -104,46 +104,6 @@ const PORT_FILTERS = [
   { usbVendorId: 0x10C4 }, { usbVendorId: 0x0403 },
 ];
 
-async function readMacFromRegs(loader) {
-  try {
-    console.log('[MAC] Reading 0x5C002000...');
-    const mac0 = await loader.readReg(0x5C002000);
-    console.log('[MAC] 0x5C002000 =', '0x' + mac0.toString(16));
-    const mac1 = await loader.readReg(0x5C002004);
-    console.log('[MAC] 0x5C002004 =', '0x' + mac1.toString(16));
-    const n = mac0 | ((mac1 & 0xFFFF) << 32);
-    const b = [(n>>0)&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF,(n>>32)&0xFF,(n>>40)&0xFF];
-    const mac = b.map(x => x.toString(16).padStart(2,'0')).join(':').toUpperCase();
-    console.log('[MAC] Parsed:', mac, 'raw bytes:', b.join(','));
-    return mac;
-  } catch (e) {
-    console.log('[MAC] readReg approach failed:', e.message);
-    console.log('[MAC] Trying alternative efuse addresses...');
-    try {
-      const mac0 = await loader.readReg(0x60008810);
-      const mac1 = await loader.readReg(0x60008814);
-      console.log('[MAC] 0x60008810 =', '0x' + mac0.toString(16));
-      console.log('[MAC] 0x60008814 =', '0x' + mac1.toString(16));
-      const n = mac0 | ((mac1 & 0xFFFF) << 32);
-      const b = [(n>>0)&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF,(n>>32)&0xFF,(n>>40)&0xFF];
-      const mac = b.map(x => x.toString(16).padStart(2,'0')).join(':').toUpperCase();
-      console.log('[MAC] Parsed from alt:', mac);
-      return mac;
-    } catch (e2) {
-      console.log('[MAC] Alt approach also failed:', e2.message);
-      console.log('[MAC] Trying loader.chip.readMac...');
-      try {
-        const mac = await loader.chip.readMac(loader);
-        console.log('[MAC] chip.readMac returned:', JSON.stringify(mac));
-        return typeof mac === 'string' ? mac : '';
-      } catch (e3) {
-        console.log('[MAC] chip.readMac also failed:', e3.message);
-        return '';
-      }
-    }
-  }
-}
-
 async function connectToPort(port) {
   clearStatus(); clearError();
   state.port = port;
@@ -166,13 +126,16 @@ async function connectToPort(port) {
     return;
   }
 
-  const [desc, mac, revision] = await Promise.all([
-    loader.chip.getChipDescription(loader).catch(() => chipName),
-    readMacFromRegs(loader),
-    loader.chip.getChipRevision(loader).catch(() => -1),
-  ]);
+  const desc = await loader.chip.getChipDescription(loader).catch(() => chipName);
+  let mac = '';
+  try {
+    const macRaw = await loader.chip.readMac(loader);
+    mac = (typeof macRaw === 'string' ? macRaw.toUpperCase() : '');
+    console.log('[MAC] chip.readMac result:', mac);
+  } catch (e) { console.log('[MAC] failed:', e.message); }
+  const revision = await loader.chip.getChipRevision(loader).catch(() => -1);
   state.chipDesc = desc;
-  state.mac = mac || '';
+  state.mac = mac;
   state.chipRevision = revision;
   console.log('[CHIP] Description:', desc, 'MAC:', mac, 'Revision:', revision);
 
@@ -475,12 +438,10 @@ async function handleFlash() {
         els['verify-progress-label'].textContent = verified ? 'Verified OK' : 'Verification done';
       } catch { verified = false; }
 
-      // Hard reset to release from download mode
-      try { await state.loader.after('hard_reset'); } catch {}
-      try { await state.transport.disconnect(); } catch {}
+          // Hard reset to release from download mode
       state.loader = null; state.transport = null; state.port = null;
 
-      await showSuccess(verified, baud);
+      await showSuccess(verified, baud, totalSize);
       return; // success
 
     } catch (err) {
@@ -500,11 +461,13 @@ async function handleFlash() {
 
 /* ── Success ── */
 
-async function showSuccess(verified, baud) {
+async function showSuccess(verified, baud, totalSize) {
   const totalTime = Date.now() - state.flashStartTime;
   els['result-version'].textContent = state.selectedRelease;
   els['result-summary'].textContent = verified ? 'Flash verified successfully!' : 'Flash complete (verification unavailable).';
-  if (baud) els['result-summary'].textContent += ` Transfer speed: ${formatRate(totalSize / (totalTime / 1000))}`;
+  if (baud && totalSize && totalTime > 0) {
+    els['result-summary'].textContent += ` Transfer speed: ${formatRate(totalSize / (totalTime / 1000))}`;
+  }
   const stats = els['result-stats']; stats.innerHTML = '';
   for (const [l, v] of [['Target', state.chipName + (state.mac ? ' (' + state.mac + ')' : '')], ['Version', state.selectedRelease], ['Duration', formatDuration(totalTime)]]) {
     stats.innerHTML += `<dt>${l}</dt><dd>${v}</dd>`;
@@ -512,8 +475,6 @@ async function showSuccess(verified, baud) {
   updateQrCode(state.mac || '');
   showStep(4);
 }
-
-let totalSize = 0; // track for success display
 
 /* ── UI Wiring ── */
 

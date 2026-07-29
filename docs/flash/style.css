@@ -41,7 +41,7 @@ body {
   display: flex;
   align-items: center;
   height: 100%;
-  animation: marquee 40s linear infinite;
+  animation: marquee 120s linear infinite;
   width: max-content;
 }
 .marquee-track > * {
