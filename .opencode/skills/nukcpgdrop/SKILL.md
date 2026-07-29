@@ -31,17 +31,18 @@ Board selection via `CONFIG_BOARD_DISPLAY` / `CONFIG_BOARD_DEVKITC` in Kconfig (
 | `firmware/main/main.c` | App init, task creation |
 | `firmware/main/web_server.c` | HTTP/REST/captive portal/file serving + audio/SD test endpoints |
 | `firmware/main/wifi_manager.c` | WiFi AP + STA mode (E2E test) |
-| `firmware/main/servos.c` | Servo control via PCA9685, direction-aware via `g_state.servo_dir[]`, `servos_start_sequence()` for timed drops |
-| `firmware/main/state.c` | NVS state persistence + battery ADC + servo config (dir, min/max) |
+| `firmware/main/servos.c` | Servo control via PCA9685, `servos_start_sequence()` for timed drops, uses `g_state.sv_start_pos/sv_stop_pos` (degrees→PWM) |
+| `firmware/main/state.c` | NVS state persistence + battery ADC + global start/stop positions (0-180°) |
 | `firmware/components/lvgl_porting/lv_port_disp.c` | ILI9341 full init (0x21 inversion, MADCTL=0x08) + FT6336G touch via `esp_lcd_touch_ft5x06` |
-| `firmware/components/dashboard_ui/screen_main.c` | LVGL dashboard (scrollable, 900px content), dynamic action button, servo direction toggles, RSSI bars, mic level bar |
-| `firmware/components/dashboard_ui/dashboard.c` | Dashboard update task, mic peak level via I2S |
-| `firmware/components/audio/es8311.c` | ES8311 full init (HP drive, EQ bypass, volume 85) |
-| `firmware/components/audio/i2s_audio.c` | I2S Philips stereo, MCLK_MULTIPLE_384, DIN=6 for mic |
+| `firmware/components/dashboard_ui/screen_main.c` | LVGL dashboard (scrollable, 1100px content), dynamic action button, 16-can 4-col grid, start/stop sliders, RSSI bars, mic level bar |
+| `firmware/components/dashboard_ui/dashboard.c` | Dashboard update task, mic peak level via global `i2s_rx_handle` |
+| `firmware/components/audio/es8311.c` | ES8311 full init per official driver (correct volume REG32, mic bias/gain) |
+| `firmware/components/audio/i2s_audio.c` | I2S Philips stereo, TX+RX handles (global), MCLK_MULTIPLE_384, DIN=6 for mic |
+| `firmware/components/audio/include/audio.h` | Extern `i2s_tx_handle`/`i2s_rx_handle` for shared access |
 | `ui/NukCPGDrop.Ui/` | Blazor WASM captive portal dashboard (Index + Debug pages) |
 | `ui/NukCPGDrop.Ui/Components/LogoDisplay.razor` | Scrolling art marquee with possum image + "Rest when you're dead" text |
-| `ui/NukCPGDrop.Ui/Components/DropStatus.razor` | Can grid with tap-to-toggle |
-| `ui/NukCPGDrop.Ui/Components/RangeSlider.razor` | Dual-knob range slider for servo calibration |
+| `ui/NukCPGDrop.Ui/Components/DropStatus.razor` | 16-can tap-to-toggle grid (4 columns) |
+| `ui/NukCPGDrop.Ui/Components/RangeSlider.razor` | Dual-knob range slider for interval range |
 | `tests/NukCPGDrop.Ui.Tests/Components/LogoDisplayTests.cs` | bUnit tests for LogoDisplay rendering |
 | `firmware/partitions.csv` | 16MB partition table (DisplayBoard) |
 | `firmware/partitions-8mb.csv` | 8MB partition table (DevKitC/E2E) |
@@ -156,7 +157,10 @@ Add `ESP_LOGI("touch", ...)` in `touch_read_cb()` in `lv_port_disp.c`. Check ser
 The LVGL action button in `screen_main.c` calls `servos_start_sequence()` which creates a `drop_seq` task. If it doesn't work, check that `servos.c` has `servos_start_sequence()` defined and that `screen_main.c` calls it when all cans are held. The web server drop endpoint calls `audio_play_prompt()` and creates `sequence_task`.
 
 ### Fix speaker clicks / no audio
-Check `es8311.c` for the full init sequence (HP drive at REG13=0x10, EQ bypass at REG1C=0x6A, volume at REG38=0x55). Check `i2s_audio.c` uses Philips format, stereo mode, and `MCLK_MULTIPLE_384`. The amplifier enable GPIO1 must be set high.
+Check `es8311.c` uses the official driver sequence (reset REG00=0x1F→0x00→0x80, clock dividers for 16kHz@MCLK=6.144MHz, HP drive at REG13=0x10, ADC/DAC power up, mic bias at REG0F=0x02, volume at REG20/REG21=0xD9). Check `i2s_audio.c` creates both TX+RX handles with Philips format, stereo mode, and `MCLK_MULTIPLE_384`. The amplifier enable GPIO1 must be set high.
+
+### Fix mic not reading
+Previously each consumer (dashboard, FFT handler, test handler) created throwaway I2S RX channels. The fix: `i2s_audio.c` creates both `i2s_tx_handle` and `i2s_rx_handle` once at init, exposed as `extern` globals via `audio.h`. All consumers read from `i2s_rx_handle` directly. Ensure `es8311.c` configures mic bias (REG0F=0x02) and mic gain (REG16).
 
 ### Add servo to state
 Extend `nukcpgdrop_state_t` in `state.h`, add defaults in `state.c`, expose in API, save via `state_save()`.
