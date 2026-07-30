@@ -325,13 +325,20 @@ function renderReleaseTable(releases, installedMd5) {
     tbody.appendChild(tr);
   }
   // Try to match installed firmware against release manifests
+  // Only check releases v1.0.9+ (docs/flash/firmware didn't exist before)
   if (installedMd5) {
     (async () => {
       for (const tag of sorted) {
+        // Skip tags before v1.0.9 (no docs/flash/firmware/)
+        const match = tag.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+        if (match) {
+          const major = parseInt(match[1]), minor = parseInt(match[2]), patch = parseInt(match[3]);
+          if (major < 1 || (major === 1 && minor < 1)) continue; // skip v1.0.x
+        }
         try {
           const manifestUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${tag}/docs/flash/firmware/manifest.json`;
-          const resp = await fetch(manifestUrl);
-          if (!resp.ok) continue;
+          const resp = await fetch(manifestUrl).catch(() => null);
+          if (!resp || !resp.ok) continue;
           const manifest = await resp.json();
           const appEntry = (manifest.files || []).find(f => f.name === 'NukCPGDrop.bin');
           if (appEntry && appEntry.md5 && appEntry.md5.toLowerCase() === installedMd5.toLowerCase()) {
