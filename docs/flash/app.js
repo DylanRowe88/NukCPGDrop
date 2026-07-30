@@ -401,14 +401,13 @@ async function handleFlash() {
   // Try downloading at progressively slower rates if flash fails
   for (let attempt = 0; attempt < BAUD_RATES.length; attempt++) {
     const baud = BAUD_RATES[attempt];
-    els['flashing-title'].textContent = `Flashing${attempt > 0 ? ' (retry ' + attempt + ' @ ' + (baud/1000) + 'k)' : ''}`;
+    els['flashing-title'].textContent = `Flashing ${state.selectedRelease}${attempt > 0 ? ' (retry ' + attempt + ')' : ''}`;
     els['flash-eta'].textContent = 'ETA: --';
 
     try {
       status(`Downloading firmware...`, 'info');
       const refs = [state.selectedRelease, 'master'];
       const fileArray = []; const fileInfo = {};
-
       for (const name of FIRMWARE_FILES) {
         let data = null;
         for (const ref of refs) {
