@@ -30,3 +30,4 @@ idf_component_register(
         vfs
         fatfs
 )
+target_compile_definitions(${COMPONENT_TARGET} PRIVATE "FW_VERSION=\"${PROJECT_VER}\"")

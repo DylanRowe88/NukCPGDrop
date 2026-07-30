@@ -116,7 +116,7 @@ static esp_err_t api_status_handler(httpd_req_t *req) {
   cJSON *wifi = cJSON_CreateObject();
   cJSON_AddNumberToObject(wifi, "rssi", wifi_ap_get_rssi());
   cJSON_AddNumberToObject(wifi, "clients", wifi_ap_get_sta_count());
-  cJSON_AddStringToObject(wifi, "version", "NukCPGDrop v1.0");
+  cJSON_AddStringToObject(wifi, "version", "NukCPGDrop " FW_VERSION);
   cJSON *client_arr = cJSON_CreateArray();
   uint8_t macs[6 * 8];
   int rssis[8];

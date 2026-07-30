@@ -8,6 +8,9 @@
 #include "freertos/task.h"
 
 static const char *TAG = "screen_main";
+#ifndef FW_VERSION
+#define FW_VERSION "dev"
+#endif
 
 #define SCREEN_W 240
 #define SCREEN_H 320
@@ -305,9 +308,9 @@ static void create_nuks_count(lv_obj_t *parent) {
   lv_obj_t *pl = lv_label_create(plus); lv_label_set_text(pl, "+"); lv_obj_center(pl);
 
   lv_obj_t *ver = lv_label_create(parent);
-  lv_label_set_text(ver, "NukCPGDrop v1.0");
+  lv_label_set_text(ver, FW_VERSION);
   lv_obj_set_style_text_color(ver, lv_color_hex(0x555555), LV_STATE_DEFAULT);
-  lv_obj_set_pos(ver, 175, y+4);
+  lv_obj_set_pos(ver, 8, y+20);
 }
 
 esp_err_t screen_main_create(void) {

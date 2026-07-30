@@ -8,3 +8,4 @@ idf_component_register(
         lvgl
         main
 )
+target_compile_definitions(${COMPONENT_TARGET} PRIVATE "FW_VERSION=\"${PROJECT_VER}\"")
