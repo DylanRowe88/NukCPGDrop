@@ -1,76 +1,66 @@
 # NukCPGDrop
 
+[![CI](https://github.com/DylanRowe88/NukCPGDrop/actions/workflows/ci.yml/badge.svg)](https://github.com/DylanRowe88/NukCPGDrop/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/DylanRowe88/NukCPGDrop)](https://github.com/DylanRowe88/NukCPGDrop/releases)
+[![WebSerial Flasher](https://img.shields.io/badge/flash-browser-blue)](https://dylanrowe88.github.io/NukCPGDrop/flash/)
+[![Architecture](https://img.shields.io/badge/docs-architecture-purple)](ARCHITECTURE.md)
+
 Timed drop rig for HomeGymCon — 16 servo-controlled N52 magnets dropping Nuks cans
 in random sequence. ESP32-S3 with captive portal web UI + 2.8" touch display.
+
+**[→ WebSerial Flasher](https://dylanrowe88.github.io/NukCPGDrop/flash/)** &nbsp;|&nbsp; **[→ Architecture Docs](ARCHITECTURE.md)**
+
+---
 
 ## Quick Start — New Developer
 
 ```bash
-# 1. Check what's installed
+# 1. Full automated setup (installs hooks, pip deps, .env)
 python scripts/setup.py
 
-# 2. Install pre-commit hooks (runs on every commit automatically)
-pip install pre-commit
-pre-commit install
-pre-commit install --hook-type pre-push
-
-# 3. Build + flash the DisplayBoard
+# 2. Build + flash the DisplayBoard
 python flash.py --board DisplayBoard
 ```
 
-Or flash from the browser: https://dylanrowe88.github.io/NukCPGDrop/flash/
+Or flash from the browser: [dylanrowe88.github.io/NukCPGDrop/flash/](https://dylanrowe88.github.io/NukCPGDrop/flash/)
 
 ## Dependencies
 
-| Tool | Version | Required for |
-|------|---------|-------------|
-| Python | 3.11+ | Build scripts, flash tool |
-| ESP-IDF | v5.2 | Firmware compilation (`install.ps1 esp32s3`) |
-| .NET SDK | 8.0 | Blazor WebAssembly UI (`dotnet install`) |
-| esptool | latest | Flashing (`pip install esptool`) |
-| gh CLI | latest | Release uploads (`winget install GitHub.cli`) |
-| ccache | — | Faster rebuilds (optional, `winget install ccache`) |
+| Tool | Version | Install |
+|------|---------|---------|
+| Python | 3.11+ | [python.org](https://python.org) |
+| ESP-IDF | v5.2 | `git clone --recursive https://github.com/espressif/esp-idf.git` |
+| .NET SDK | 8.0 | [dotnet.microsoft.com](https://dotnet.microsoft.com/download) |
+| esptool | latest | `pip install esptool` |
+| gh CLI | latest | `winget install GitHub.cli` or [cli.github.com](https://cli.github.com) |
 
-### Environment Setup
+### Environment
 
 ```bash
-# Windows — activate ESP-IDF before building
-. C:/path/to/esp-idf/export.ps1
-
-# Linux/macOS
-source ~/esp/esp-idf/export.sh
+# Activate ESP-IDF before building (every new terminal)
+. C:/path/to/esp-idf/export.ps1          # Windows
+source ~/esp/esp-idf/export.sh           # Linux/macOS
 ```
 
 ## Development Workflow
 
 ```bash
-# Full build pipeline (UI → embed → firmware → flash)
-python flash.py --board DisplayBoard
-
-# Build & run C# tests
-dotnet test tests/NukCPGDrop.Ui.Tests/
-
-# Build firmware tests
-cd firmware && idf.py build --target test
-
-# Flash via CLI (auto-detects board by MAC)
-python flash.py --board DisplayBoard
-
-# E2E test: flash DevKitC with test firmware
-python flash.py --board E2EBoard --monitor
+python flash.py --board DisplayBoard     # full pipeline + flash
+python flash.py --identify               # list connected boards
+dotnet test tests/NukCPGDrop.Ui.Tests/   # run C# tests
+cd firmware && idf.py test               # run firmware tests
 ```
 
-## Pre-commit Hooks (automatic)
+## Pre-commit & Pre-push Hooks
 
-Every commit runs: full pipeline (dotnet publish → embed → firmware build) → C# tests → firmware tests → codespell → linting.
+After `python scripts/setup.py`, every `git commit` automatically runs:
 
-Every push runs: firmware bundle → release upload → E2E tests.
+| Stage | What runs |
+|-------|-----------|
+| Pre-commit | Full pipeline (Blazor → embed → firmware) → C# tests → firmware tests → codespell → clang-format → lint |
+| Pre-push   | Firmware bundle → GitHub release upload → E2E tests |
 
-If a hook blocks you:
-```bash
-git commit --no-verify   # bypass pre-commit
-git push --no-verify     # bypass pre-push
-```
+Skip with `--no-verify` if needed.
 
 ## Boards
 
@@ -81,15 +71,11 @@ git push --no-verify     # bypass pre-push
 
 ## Release Process
 
+Pre-push hooks create a draft release automatically. To publish:
+
 ```bash
-# Pre-push hooks create a draft release automatically.
-# To publish:
 gh release edit v1.2.0 --draft=false
 ```
-
-## Architecture
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for pinouts, API reference, LVGL layout, E2E infra.
 
 ## License
 

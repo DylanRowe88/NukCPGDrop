@@ -3,100 +3,175 @@
 NukCPGDrop — one-command development environment setup.
 
 Usage:
-    python scripts/setup.py          # interactive
+    python scripts/setup.py          # full interactive setup
     python scripts/setup.py --check  # just check what's missing
 """
 
 import argparse, os, platform, shutil, subprocess, sys, json
 from pathlib import Path
 
-REQUIRED_PYTHON_PACKAGES = ["pyserial", "esptool"]
-OPTIONAL_PACKAGES = ["codespell", "playwright"]
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-def check(description, condition, hint=""):
-    mark = "[OK]" if condition else "[MISS]"
-    print(f"  {mark} {description}")
-    if not condition and hint:
-        print(f"       {hint}")
-    return condition
+def step(msg):
+    print(f"\n  [{msg}]")
+
+def ok(msg=""):
+    print(f"    [OK] {msg}" if msg else "    [OK]")
+
+def warn(msg):
+    print(f"    [WARN] {msg}")
+
+def fail(msg):
+    print(f"    [FAIL] {msg}")
+    return False
 
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
+def pip_install(pkg):
+    r = run([sys.executable, "-m", "pip", "install", pkg])
+    return r.returncode == 0
+
 def main():
     parser = argparse.ArgumentParser(description="NukCPGDrop dev setup")
     parser.add_argument("--check", action="store_true", help="Only check, don't install")
-    parser.add_argument("--fix", action="store_true", help="Attempt to auto-fix issues")
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent
-    os.chdir(repo_root)
-
-    print(f"\n=== NukCPGDrop Dev Setup ===  ({repo_root})\n")
-    print("Checking dependencies...\n")
+    os.chdir(REPO_ROOT)
+    print(f"\n{'='*60}")
+    print(f"  NukCPGDrop Development Setup")
+    print(f"  {REPO_ROOT}")
+    print(f"{'='*60}\n")
 
     all_ok = True
 
-    # ── Git ──
-    git_ok = check("git installed", shutil.which("git"))
-    if git_ok:
-        hook_ok = os.path.exists(".git/hooks/pre-commit")
-        check("pre-commit hooks installed", hook_ok, "Run: pip install pre-commit && pre-commit install")
-
-    # ── Python ──
-    py = shutil.which("python") or shutil.which("python3")
-    py_ok = check("Python 3.11+", py is not None, "Install Python 3.11+ from python.org")
-    if py_ok:
+    # ── 1. Python ──
+    step("Python")
+    if not shutil.which("python") and not shutil.which("python3"):
+        all_ok = fail("Python not found. Install 3.11+ from python.org")
+    else:
+        py = shutil.which("python") or shutil.which("python3")
         v = run([py, "--version"]).stdout.strip()
-        check(f"Python version: {v}", "3." in v)
+        ok(f"{v}")
+        if not args.check:
+            for pkg in ["pre-commit", "pyserial", "esptool"]:
+                if run([py, "-m", "pip", "show", pkg]).returncode != 0:
+                    print(f"    Installing {pkg}...")
+                    pip_install(pkg)
+            if run([py, "-m", "pip", "show", "codespell"]).returncode != 0:
+                print(f"    Installing codespell (optional)...")
+                pip_install("codespell")
 
-    # ── .NET SDK ──
-    dotnet = shutil.which("dotnet")
-    dn_ok = check(".NET SDK 8.0+", dotnet is not None, "Install from dotnet.microsoft.com/download")
-    if dn_ok:
+    # ── 2. .NET SDK ──
+    step(".NET SDK")
+    dn = shutil.which("dotnet")
+    if not dn:
+        all_ok = fail("Not found. Install from dotnet.microsoft.com/download")
+    else:
         dv = run(["dotnet", "--version"]).stdout.strip()
-        check(f".NET version: {dv}", dv.startswith("8"))
+        ok(f"v{dv}")
 
-    # ── ESP-IDF ──
+    # ── 3. ESP-IDF ──
+    step("ESP-IDF")
     idf_path = os.environ.get("IDF_PATH", "")
-    idf_ok = check("IDF_PATH set", bool(idf_path), "Set IDF_PATH or run export.ps1 / export.sh")
-    if idf_ok:
+    if not idf_path:
+        # Search common install locations
+        candidates = [
+            Path(os.environ.get("USERPROFILE", "C:/")) / "source" / "repos" / "esp-idf",
+            Path(os.environ.get("USERPROFILE", "C:/")) / "esp" / "esp-idf",
+            Path.home() / "esp" / "esp-idf",
+            Path("/opt/esp-idf"),
+            Path("/usr/local/esp-idf"),
+        ]
+        for c in candidates:
+            if (c / "tools" / "idf.py").exists():
+                idf_path = str(c)
+                os.environ["IDF_PATH"] = idf_path
+                break
+    if idf_path:
         idf_py = Path(idf_path) / "tools" / "idf.py"
-        check("idf.py exists", idf_py.exists(), f"ESP-IDF not found at {idf_path}")
-        esp_target = run([sys.executable or "python", str(idf_py), "--version"],
-                        cwd=repo_root / "firmware").stdout.strip()
-        check("ESP-IDF version", bool(esp_target), esp_target[:80])
+        if idf_py.exists():
+            ok(f"Found at {idf_path}")
+            if not args.check:
+                # Export environment for this shell
+                export = Path(idf_path) / "export.ps1" if platform.system() == "Windows" else Path(idf_path) / "export.sh"
+                if export.exists():
+                    print(f"    Activate with: . {export}")
+        else:
+            all_ok = fail(f"IDF_PATH set but idf.py not found at {idf_py}")
+    else:
+        all_ok = fail("Not found. Install from docs.espressif.com")
+        print("       Windows: git clone --recursive https://github.com/espressif/esp-idf.git")
+        print("                cd esp-idf && install.ps1 esp32s3")
+        print("       Linux:   See https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/get-started/")
 
-    # ── esptool ──
-    check("esptool (pip)", shutil.which("esptool.py") or shutil.which("esptool"),
-          "Run: pip install esptool")
+    # ── 4. esptool ──
+    step("esptool")
+    if shutil.which("esptool.py") or shutil.which("esptool"):
+        ok()
+    else:
+        if not args.check:
+            print("    Installing...")
+            pip_install("esptool")
+        else:
+            warn("Not installed (run setup without --check to install)")
 
-    # ── gh CLI ──
-    gh_ok = check("GitHub CLI (gh)", shutil.which("gh"), "Install from cli.github.com")
-    if gh_ok:
+    # ── 5. GitHub CLI ──
+    step("GitHub CLI")
+    gh = shutil.which("gh")
+    if gh:
         auth = run(["gh", "auth", "status"]).stdout.strip()
-        check("gh authenticated", "Logged in" in auth,
-              "Run: gh auth login")
+        if "Logged in" in auth:
+            ok("Authenticated")
+        else:
+            warn("Not authenticated — run: gh auth login")
+    else:
+        warn("Not installed. Install from cli.github.com (or: winget install GitHub.cli)")
 
-    # ── ccache ──
-    check("ccache (optional, faster builds)", shutil.which("ccache"))
+    # ── 6. pre-commit hooks ──
+    step("Pre-commit hooks")
+    hooks_exist = (REPO_ROOT / ".git" / "hooks" / "pre-commit").exists()
+    if hooks_exist:
+        ok("Pre-commit hooks installed")
+    else:
+        if not args.check:
+            print("    Installing...")
+            r = run([sys.executable, "-m", "pre_commit", "install"])
+            if r.returncode == 0:
+                run([sys.executable, "-m", "pre_commit", "install", "--hook-type", "pre-push"])
+                ok()
+            else:
+                warn("pre-commit install failed — run manually: pre-commit install")
+        else:
+            warn("Not installed (run setup without --check)")
 
-    print(f"\n=== Summary ===")
-    print(f"  Repo: {repo_root}")
-    print(f"  Branch: {run(['git','rev-parse','--abbrev-ref','HEAD']).stdout.strip()}")
-    print(f"  Last tag: {run(['git','describe','--tags','--always']).stdout.strip()}")
+    # ── 7. .env file ──
+    step("Environment file")
+    env_file = REPO_ROOT / ".env"
+    env_example = REPO_ROOT / ".env.example"
+    if env_file.exists():
+        ok(".env exists")
+    elif env_example.exists():
+        if not args.check:
+            import shutil
+            shutil.copy2(env_example, env_file)
+            ok("Created .env from .env.example — edit if needed")
+        else:
+            warn("Run setup without --check to create .env")
 
-    if not args.check:
-        print("\n=== Quick Start ===")
-        print(f"  1. Activate ESP-IDF: . esp-idf/export.ps1 (or export.sh)")
-        print(f"  2. Install hooks:     pip install pre-commit && pre-commit install")
-        print(f"  3. Build:            python flash.py --board DisplayBoard")
-        print(f"  4. Flash:            Connect ESP via USB, then:")
-        print(f"                       python flash.py --board DisplayBoard")
-        print(f"\n  Or use the WebSerial flasher:")
-        print(f"    https://dylanrowe88.github.io/NukCPGDrop/flash/")
-        print()
-
+    # ── Summary ──
+    print(f"\n{'='*60}")
+    if all_ok:
+        print(f"  All dependencies satisfied.")
+    else:
+        print(f"  Some dependencies need attention (see [FAIL] above).")
+    print()
+    print(f"  Next steps:")
+    print(f"    python flash.py --board DisplayBoard    # build + flash")
+    print(f"    python flash.py --identify              # list boards")
+    print(f"    dotnet test tests/NukCPGDrop.Ui.Tests/  # run C# tests")
+    print(f"    https://dylanrowe88.github.io/NukCPGDrop/flash/  # WebSerial flasher")
+    print(f"{'='*60}\n")
     return 0 if all_ok else 1
 
 if __name__ == "__main__":

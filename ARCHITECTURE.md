@@ -1,6 +1,6 @@
 # NukCPGDrop — Architecture & CI/CD
 
-HomeGymCon timed drop rig: 6 SG90 servos with N52 magnets hold and release empty
+HomeGymCon timed drop rig: 16 SG90 servos with N52 magnets hold and release empty
 Nuks cans in random sequence. ESP32-S3 creates a WiFi AP with captive portal,
 serves a Blazor WebAssembly dashboard, drives a 2.8" touch display, and plays
 audio prompts.
@@ -73,19 +73,19 @@ This panel requires:
 
 ```
 main/
-  led.c               — WS2812 RMT driver
-  servos.c            — Servo drop/batch/hold API, reads g_state.servo_dir[]
-  pca9685.c           — I2C PCA9685 PWM driver
-  state.c             — NVS persistence + battery ADC
+  servos.c            — Servo drop/hold API, uses g_state.active_servos + sv_start/sv_stop
+  pca9685.c           — I2C PCA9685 PWM driver (16 channels)
+  state.c             — NVS persistence + battery ADC + Nuks count + positions
   web_server.c        — HTTP/REST/captive portal/file serving + audio/SD test endpoints
   wifi_manager.c      — WiFi AP + STA mode (E2E test) + per-client list API
   dns_server.c        — DNS captive portal
 components/
   lvgl/               — LVGL v8.3.6 library
   lvgl_porting/       — ILI9341 SPI (direct mode) + FT6336G touch (esp_lcd_touch_ft5x06)
-  dashboard_ui/       — Scrollable LVGL digital twin (520px content), dynamic action button,
-                        RSSI bars, servo direction toggles, sound toggle, mic level bar
-  audio/              — ES8311 I2S codec driver + prompts
+  dashboard_ui/       — Scrollable LVGL digital twin (720px), dynamic action button,
+                        interval range sliders, held/dropped position sliders,
+                        8-bin FFT spectrum, Nuks +/- count, sound toggle, battery
+  audio/              — ES8311 I2S codec driver + actual audio prompts (sine/sweep tones)
   i2c_shared/         — Shared I2C bus singleton (touch 0x38 + PCA9685 0x40 + ES8311 0x18)
 ```
 
@@ -97,8 +97,8 @@ components/
 | lvgl | 4K | 5 | 0 | `lv_task_handler()` every 5ms |
 | wifi | 4K | 3 | 1 | WiFi AP, mDNS |
 | httpd | 8K | 2 | 1 | HTTP server (`lwip_select` on port 80) |
-| drop_seq | 4K | 4 | 1 | Drop sequence execution |
-| dashboard_update | 3K | 4 | 1 | Updates LVGL widgets, mic peak, servo state |
+| drop_seq | 4K | 4 | 1 | Drop sequence execution (respects active_servos) |
+| dashboard_update | 3K | 4 | 1 | Updates LVGL widgets, 8-bin FFT spectrum, servo state |
 
 ### Captive Portal
 
@@ -115,52 +115,38 @@ mDNS: `nukcpgdrop.local`
 
 ### State Persistence
 
-Full state blob in NVS (`nukcpgdrop` namespace): difficulty, double-drop flag,
-drop count, custom interval, range (min/max), last sequence, battery voltage,
-servo direction[6], sv_min/max[6], sound_enabled.
+Full state blob in NVS (`nukcpgdrop` namespace): difficulty, drop count, active_servos (Nuks count),
+interval range (min/max), last sequence, battery voltage, sv_start_pos (held angle),
+sv_stop_pos (dropped angle), sound_enabled. Version auto-detected from git via `PROJECT_VER`.
 
-### Digital Twin Dashboard (LVGL)
+### Digital Twin Dashboard (LVGL) — Current Layout
 
-Scrollable screen (240×320 visible, 900px content height):
+Scrollable screen (240×320 visible, 720px content height):
 
 ```
 ┌──────────────────────────────────┐
 │  NukCPGDrop           RSSI:-45   │  Top bar
 ├──────────────────────────────────┤
-│  Cans                            │
-│  [1 HELD] [2 HELD] [3 HELD]      │  6 tap-to-toggle can buttons
-│  [4 HELD] [5 HELD] [6 HELD]      │  green=held, red=dropped, yellow=anim
+│  Cans (16 max, active_servos=N)  │
+│  [1] [2] [3] [4] [5] [6]... [N] │  N tap-to-toggle buttons, 4-col grid
 ├──────────────────────────────────┤
-│  Actions                         │
-│  [DROP ALL / RESET / RUNNING...]  │  Single dynamic button
+│  [DROP ALL / RESET / RUNNING...] │  Dynamic action button
 ├──────────────────────────────────┤
-│  Progress            ▓▓▓░░░  3/6 │  Adjusts for double-drop mode
+│  Interval Range                  │
+│  Min: [===o==========] 500 ms    │  Always visible (always random mode)
+│  Max: [=====o========] 2000 ms   │
 ├──────────────────────────────────┤
-│  Drop Interval                   │
-│  Interval: [=======o====] 2000ms │
-│  Double Drop: [ON/OFF]          │
+│  Servo Positions                 │
+│  Held: [===o==========] 45°      │  Changing moves all held servos
+│  Dropped: [====o=======] 135°    │  Changing moves all dropped servos
 ├──────────────────────────────────┤
-│  Difficulty                      │
-│  [Long] [Short] [Random]         │
-│  Min: [==o===]  Max: [===o==]   │  (hidden unless Random)
+│  Sound [ON/OFF]                  │  Toggle switch
 ├──────────────────────────────────┤
-│  System                          │
-│  PCA9685: OK  Clients: 2         │
-│  LED: rgb(0,255,0)  ▂▃▄▅  bars  │  RSSI signal bars
-├──────────────────────────────────┤
-│  Servo Direction                 │
-│  [1 LO] [2 HI] [3 LO]           │  Per-servo toggle
-│  [4 HI] [5 LO] [6 HI]           │
-├──────────────────────────────────┤
-│  Sound                           │
-│  Enable: [ON/OFF]               │
-├──────────────────────────────────┤
-│  Mic Level                       │
-│  [========o===========]          │  Real-time audio peak
+│  ██ ██ ██ ██ ██ ██ ██ ██        │  8-bin FFT spectrum (green→yellow→red)
 ├──────────────────────────────────┤
 │  Drops: 42  Clients: 2           │  Status line
 │  Battery: ████████░ 93%          │
-│  NukCPGDrop v1.0                 │
+│  Nuks [-] 16 [+]  v1.2.0        │  Auto-version from git tag
 └──────────────────────────────────┘
 ```
 
@@ -169,69 +155,84 @@ Scrollable screen (240×320 visible, 900px content height):
 - **ILI9341**: Direct SPI on SPI2_HOST (MOSI=11, MISO=13, SCLK=12, CS=10, DC=46, BL=45). No hardware reset pin. 40MHz clock, HALF DUPLEX.
 - **FT6336G**: I2C addr 0x38, compatible with `esp_lcd_touch_ft5x06` driver. RST=GPIO18. LVGL indev registered with `touch_read_cb` callback.
 
+### Audio
+
+- **ES8311 codec**: I2C addr 0x18, I2S Philips format, stereo, MCLK_MULTIPLE_384
+- **Prompts**: Actual sine/sweep tones generated on-the-fly: 440Hz (single drop), rising 200→800Hz (drop all), falling (reset), pulsed 120Hz (low battery)
+- **Mic**: MEMS mic via DIN=6, read via shared I2S RX handle, crude FFT binned into 8 frequency bars
+
 ---
 
 ## Web UI (Blazor WebAssembly)
 
-Standalone .NET 8 Blazor WASM app gzip-compressed and embedded as C header.
+Standalone .NET 8 Blazor WASM app gzip-compressed and embedded as C header. Single-page
+(simplified from previous debug/home split).
 
 ### Build Pipeline
 
 ```
-dotnet publish -c Release             →  publish/wwwroot/
-scripts/embed-web.py                   →  firmware/main/include/web_assets.h
-idf.py build                           →  firmware/build/NukCPGDrop.bin (~4.8 MB)
+dotnet publish -c Release              →  publish/wwwroot/
+scripts/embed-web.py ... "vX.Y.Z"      →  firmware/main/include/web_assets.h
+idf.py build                           →  firmware/build/NukCPGDrop.bin (~4 MB)
 ```
+
+`embed-web.py` also writes `wwwroot/version.json` with the build version for runtime
+consistency checks against the API.
 
 ### Pages
 
-| Route | File | Content |
-|-------|------|---------|
-| `/` | `Index.razor` | Main dashboard: can grid, drop/reset button, difficulty, interval, double-drop, progress bar, scrolling art marquee |
-| `/debug` | `Debug.razor` | Full debug: servo calibration + direction, sound toggle, mic FFT spectrum, WiFi client list, system stats |
-| `/dashboard` | `Dashboard.razor` | (placeholder) |
+Single page at `/` (`Index.razor`): interval range sliders (always random),
+held/dropped position sliders (real-time servo update), sound toggle, can grid
+(active_servos determines count), Nuks +/- counter at bottom, FFT spectrum canvas,
+version from API.
 
 ### REST API
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/status` | System state, held, PCA9685, LED, WiFi + per-client list, battery, servo config, sound |
+| GET | `/api/status` | System state, held, PCA9685, WiFi + per-client list, battery, versions |
 | POST | `/api/drop` | Start sequence or `{"id":N}` single |
 | POST | `/api/hold` | `{"id":N}` hold one can |
 | POST | `/api/reset` | Hold all cans |
-| POST | `/api/config` | Difficulty, double-drop, interval, range, sound_enabled |
-| POST | `/api/servo_config` | Per-servo direction + min/max angles |
+| POST | `/api/config` | Difficulty, range, sound, active_servos, held/dropped positions |
+| POST | `/api/servo_config` | Held/dropped positions (with real-time servo update) |
 | GET | `/api/audio/fft` | 8-bin audio spectrum from mic |
-| POST | `/api/test/audio` | Audio loopback test (1kHz sine → speaker → mic) |
-| POST | `/api/test/sdcard` | SD card mount/write/read/verify |
+| POST | `/api/test/audio` | Audio loopback test |
+| POST | `/api/test/sdcard` | SD card mount/write/read |
+
+### Version Consistency
+
+- Firmware version auto-detected from git tag via ESP-IDF's `PROJECT_VER` → `FW_VERSION` compile define
+- `/api/status` returns `wifi.version` = `"NukCPGDrop vX.Y.Z"`
+- Blazor displays version from API response (`@(_status?.Wifi?.Version ?? "")`)
+- Embedded `wwwroot/version.json` allows Blazor to compare its build version against the firmware
 
 ---
 
-## Flashing
-
-### WebSerial browser flasher (end users)
+## WebSerial Flasher
 
 The `docs/flash/` directory contains a standalone HTML/JS page using
 [esptool-js](https://github.com/espressif/esptool-js) and WebSerial to flash
-firmware directly from the browser. Served at
-[dylanrowe88.github.io/NukCPGDrop/flash/](https://dylanrowe88.github.io/NukCPGDrop/flash/).
+firmware directly from the browser. Features:
+- MAC-based board identification (reads chip registers)
+- Release version selection with MD5-based installed-firmware detection
+- Auto-reconnect to previously authorized serial ports
+- Dynamic marquee (possum + "Rest when you're dead") that scales to viewport
+- Download from `raw.githubusercontent.com` (CORS-enabled)
+- Baud rate auto-detect: 921600 → 460800 → 230400 → 115200 with retry
+- per-file progress bars, total progress, ETA countdown
+- Flash verification via MD5 checksum
+- USB-JTAG hard reset after flash (DTR/RTS via WebSerial API)
+- Wi-Fi QR code on completion (dynamic SSID from MAC)
+- TRACE log suppression
+
+Served at: https://dylanrowe88.github.io/NukCPGDrop/flash/
 
 ### CLI flasher (development)
 
-MAC-address-based board detection via `flash.py`:
-
 ```bash
-python flash.py --board DisplayBoard   # 16MB flash, CONFIG_BOARD_DISPLAY
-python flash.py --board E2EBoard       # 8MB flash, CONFIG_BOARD_DEVKITC, E2E test
-```
-
-### Board Configs
-
-```python
-BOARD_CONFIGS = {
-    "DisplayBoard": { "build_dir": "build", "flash_size": "16MB", "partitions": "partitions.csv" },
-    "E2EBoard":     { "build_dir": "build_devkitc", "flash_size": "8MB", "partitions": "partitions-8mb.csv" },
-}
+python flash.py --board DisplayBoard   # MAC-based detection
+python flash.py --identify               # list boards
 ```
 
 ---
@@ -240,47 +241,63 @@ BOARD_CONFIGS = {
 
 ### DevKitC STA HTTP Test
 
-A special firmware variant (`CONFIG_E2E_TEST=y`) that:
-1. Initializes NVS + WiFi
-2. Connects as STA to `NukCPGDrop-D233BC`
-3. Runs HTTP GET to `/api/status` and `/`
-4. Logs responses via serial
-5. Idles (vTaskSuspend)
-
-Build: `python flash.py --board E2EBoard`
+A special firmware variant (`CONFIG_E2E_TEST=y`) that connects as STA to
+`NukCPGDrop-D233BC` and runs HTTP tests, logging via serial.
 
 ### QEMU Test
 
-Located in `tests/e2e/`. Uses Espressif's `qemu-system-xtensa` fork to boot the
-firmware and check serial logs. Partition table uses 16MB flash to match the
-DisplayBoard firmware. HTTP tests are skipped (QEMU has no RF emulation).
+Located in `tests/e2e/`. Boots the firmware in QEMU and checks serial logs.
+HTTP tests skipped (no RF emulation). Skipped gracefully if QEMU not installed.
 
 ### Hardware Playwright Tests
 
-Board-specific Playwright + Mocha tests in `tests/e2e/firmware.test.js`. Runs
-against `http://192.168.4.1/` when `BOARD_TYPE` is set. Covers boot, API
-endpoints, static assets, captive portal, dashboard rendering, control ops.
+Playwright + Mocha tests in `tests/e2e/firmware.test.js`. Runs against
+`http://192.168.4.1/` when `BOARD_TYPE` is set.
 
 ---
 
 ## Pre-commit / Pre-push Hooks
 
-All hooks are Python-based (no PowerShell). Defined in `.pre-commit-config.yaml`.
+All Python-based. Defined in `.pre-commit-config.yaml`.
 
 **Pre-commit (every commit):**
 
-```bash
-clang-format → dotnet format → dotnet restore → dotnet build →
-dotnet test → idf.py build → trailing-whitespace → end-of-file-fixer →
-check-yaml → check-added-large-files → check-merge-conflict
+```
+Full pipeline: dotnet publish → embed-web.py → idf.py build
+C# tests (13), firmware tests, codespell, clang-format,
+trailing-whitespace, EOF-fixer, check-yaml, check-added-large-files
 ```
 
-**Pre-push (added):**
+**Pre-push:**
 
-```bash
-idf.py build (DevKitC E2E) → create-firmware-bundle → QEMU E2E test (graceful skip) →
-hardware E2E test (graceful skip without BOARD_TYPE)
 ```
+DevKitC E2E build → firmware bundle → GitHub release upload →
+version consistency check → QEMU E2E → hardware E2E
+```
+
+---
+
+## Versioning
+
+Version auto-detected from the nearest `git` tag by ESP-IDF's build system.
+Available as `FW_VERSION` compile definition in both web_server and dashboard_ui
+components. Displayed in:
+- LVGL bottom bar: `v1.2.0`
+- Blazor bottom bar: from API `wifi.version`
+- WebSerial flasher: installed firmware detection via MD5 manifest matching
+
+---
+
+## CI/CD
+
+GitHub Actions (`ci.yml`) on push/PR to master:
+- `ui-lint`: dotnet format verification
+- `ui-test`: all C# tests
+- `draft-release` (master push only): creates a draft release with instructions
+  to build locally and upload via `gh release upload`
+
+No firmware build on GitHub runners (minutes are expensive). Build locally with
+`python flash.py --board DisplayBoard`.
 
 ---
 
@@ -288,30 +305,23 @@ hardware E2E test (graceful skip without BOARD_TYPE)
 
 | File | Purpose |
 |------|---------|
-| `firmware/main/main.c` | App init, E2E test mode, task bootstrap |
-| `firmware/main/pca9685.c` | I2C PCA9685 driver |
-| `firmware/main/servos.c` | Servo abstraction, direction-aware via `g_state.servo_dir[]`, `servos_start_sequence()` for timed drops |
-| `firmware/main/state.c` | NVS persistence + battery + servo config |
-| `firmware/main/web_server.c` | HTTP + REST + captive portal + file serving + audio/SD test endpoints |
-| `firmware/main/wifi_manager.c` | WiFi AP + STA mode + per-client list API |
-| `firmware/components/lvgl_porting/lv_port_disp.c` | ILI9341 SPI (full init) + FT6336G touch (esp_lcd_touch_ft5x06) |
-| `firmware/components/dashboard_ui/screen_main.c` | Scrollable LVGL digital twin (900px content, all widgets) |
-| `firmware/components/dashboard_ui/dashboard.c` | Dashboard update task (200ms tick, mic level read) |
-| `firmware/components/audio/` | ES8311 I2S + speaker prompts |
-| `firmware/partitions.csv` | 16MB partition table (DisplayBoard) |
-| `firmware/partitions-8mb.csv` | 8MB partition table (DevKitC/E2E) |
-| `firmware/sdkconfig.defaults` | DisplayBoard config |
-| `firmware/sdkconfig.defaults.e2e` | E2E test config |
-| `ui/NukCPGDrop.Ui/` | Blazor WASM dashboard (Index + Debug pages) |
-| `ui/NukCPGDrop.Ui/Components/LogoDisplay.razor` | Scrolling art marquee with possum + text |
-| `ui/NukCPGDrop.Ui/Components/RangeSlider.razor` | Dual-knob range slider for servo calibration |
-| `ui/NukCPGDrop.Ui/Components/DropStatus.razor` | Can grid with tap-to-toggle |
-| `flash.py` | MAC-based build + flash + verify |
-| `scripts/embed-web.py` | WASM → C header |
-| `scripts/board_config.py` | MAC alias registry |
-| `scripts/create-firmware-bundle.py` | Release zip builder |
+| `firmware/main/main.c` | App init, task bootstrap, E2E test mode |
+| `firmware/main/servos.c` | PCA9685 servo control, uses `active_servos` + global held/dropped positions |
+| `firmware/main/state.c` | NVS persistence: Nuks count, interval range, positions, battery |
+| `firmware/main/web_server.c` | HTTP + REST + captive portal (individual URI handlers, no wildcards) |
+| `firmware/main/wifi_manager.c` | WiFi AP + STA + per-client list |
+| `firmware/components/lvgl_porting/lv_port_disp.c` | ILI9341 full init + FT6336G touch |
+| `firmware/components/dashboard_ui/screen_main.c` | LVGL digital twin (720px, all controls) |
+| `firmware/components/dashboard_ui/dashboard.c` | 200ms update task, 256-sample crude FFT → 8 bins |
+| `firmware/components/audio/es8311.c` | ES8311 init per official driver sequence |
+| `firmware/components/audio/i2s_audio.c` | I2S TX+RX handles (global, Philips stereo) |
+| `firmware/components/audio/prompts.c` | Real sine/sweep tone generation (was stub) |
+| `ui/NukCPGDrop.Ui/Pages/Index.razor` | Single-page Blazor dashboard |
 | `docs/flash/` | WebSerial browser flasher (GitHub Pages) |
-| `tests/e2e/firmware.test.js` | Playwright + Mocha E2E suite |
-| `tests/e2e/qemu.js` | QEMU process manager |
+| `flash.py` | MAC-based CLI build + flash |
+| `scripts/setup.py` | One-command dev environment setup |
+| `scripts/embed-web.py` | WASM → C header (also writes version.json) |
+| `scripts/create-firmware-bundle.py` | Release zip with manifest.json |
+| `.pre-commit-config.yaml` | All hook definitions |
+| `.github/workflows/ci.yml` | GitHub Actions: lint, test, draft release |
 | `.opencode/skills/nukcpgdrop/SKILL.md` | Agent skill for AI coding assistants |
-| `docs/index.html` | GitHub Pages root (redirects to repo) |
