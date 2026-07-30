@@ -25,44 +25,13 @@ repos:
         entry: dotnet
         args: [restore, ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj]
 
-      - id: dotnet-publish
-        name: dotnet publish + embed + firmware build
-        language: system
-        pass_filenames: false
-        always_run: true
-        entry: python
-        args:
-          - -c
-          - >
-            import subprocess, sys, os;
-            # 1. Build Blazor WASM
-            r = subprocess.run(['dotnet','publish','ui/NukCPGDrop.Ui/','-c','Release',
-              '-o','publish/wwwroot'], capture_output=True);
-            if r.returncode != 0:
-              print('dotnet publish FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
-            # 2. Embed web assets into firmware
-            embed = 'scripts/embed-web.py';
-            pub = 'publish/wwwroot';
-            hdr = 'firmware/main/include/web_assets.h';
-            r = subprocess.run([sys.executable, embed, pub, hdr, 'precommit'], capture_output=True);
-            if r.returncode != 0:
-              print('embed-web FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
-            # 3. Build firmware
-            idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
-            if not os.path.exists(idf):
-              idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
-            r = subprocess.run([sys.executable, idf, 'build'], cwd='firmware', capture_output=True);
-            if r.returncode != 0:
-              print('firmware build FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
-            print('  Pipeline OK: Blazor + embed + firmware')
-
       - id: dotnet-test
         name: dotnet test
         language: system
         pass_filenames: false
         always_run: true
         entry: dotnet
-        args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release, --no-restore]
+        args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release]
 
       - id: firmware-test
         name: ESP-IDF firmware unit tests
@@ -77,10 +46,31 @@ repos:
             idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
             if not os.path.exists(idf):
               idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
-            r = subprocess.run([sys.executable, idf, 'build', '--target', 'test'], cwd='firmware');
+            r = subprocess.run([sys.executable, idf, 'build', '--target', 'test'], cwd='firmware', capture_output=True);
             if r.returncode != 0:
               print('[warn] Firmware test failed - pass with --no-verify to skip');
             sys.exit(0)
+
+      - id: full-pipeline
+        name: Full build pipeline (Blazor → embed → firmware)
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-push]
+        entry: python
+        args:
+          - -c
+          - >
+            import subprocess, sys, os;
+            r = subprocess.run(['dotnet','publish','ui/NukCPGDrop.Ui/','-c','Release','-o','publish/wwwroot'], capture_output=True);
+            if r.returncode != 0: print('dotnet publish FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
+            r = subprocess.run([sys.executable, 'scripts/embed-web.py', 'publish/wwwroot', 'firmware/main/include/web_assets.h', 'prepush'], capture_output=True);
+            if r.returncode != 0: print('embed-web FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
+            idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
+            if not os.path.exists(idf): idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
+            r = subprocess.run([sys.executable, idf, 'build'], cwd='firmware');
+            if r.returncode != 0: print('firmware build FAILED'); sys.exit(r.returncode);
+            print('  Pipeline OK')
 
       - id: firmware-build-e2e
         name: ESP-IDF firmware build (DevKitC E2E)
