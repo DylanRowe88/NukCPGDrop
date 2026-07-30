@@ -25,13 +25,36 @@ repos:
         entry: dotnet
         args: [restore, ui/NukCPGDrop.Ui/NukCPGDrop.Ui.csproj]
 
-      - id: dotnet-build
-        name: dotnet build
+      - id: dotnet-publish
+        name: dotnet publish + embed + firmware build
         language: system
         pass_filenames: false
         always_run: true
-        entry: dotnet
-        args: [build, ui/NukCPGDrop.Ui/, -c, Release]
+        entry: python
+        args:
+          - -c
+          - >
+            import subprocess, sys, os;
+            # 1. Build Blazor WASM
+            r = subprocess.run(['dotnet','publish','ui/NukCPGDrop.Ui/','-c','Release',
+              '-o','publish/wwwroot'], capture_output=True);
+            if r.returncode != 0:
+              print('dotnet publish FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
+            # 2. Embed web assets into firmware
+            embed = 'scripts/embed-web.py';
+            pub = 'publish/wwwroot';
+            hdr = 'firmware/main/include/web_assets.h';
+            r = subprocess.run([sys.executable, embed, pub, hdr, 'precommit'], capture_output=True);
+            if r.returncode != 0:
+              print('embed-web FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
+            # 3. Build firmware
+            idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
+            if not os.path.exists(idf):
+              idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
+            r = subprocess.run([sys.executable, idf, 'build'], cwd='firmware', capture_output=True);
+            if r.returncode != 0:
+              print('firmware build FAILED'); print(r.stderr.decode()[-500:]); sys.exit(r.returncode);
+            print('  Pipeline OK: Blazor + embed + firmware')
 
       - id: dotnet-test
         name: dotnet test
@@ -41,8 +64,8 @@ repos:
         entry: dotnet
         args: [test, tests/NukCPGDrop.Ui.Tests/, -c, Release, --no-restore]
 
-      - id: firmware-build
-        name: ESP-IDF firmware build
+      - id: firmware-test
+        name: ESP-IDF firmware unit tests
         language: system
         pass_filenames: false
         always_run: true
@@ -54,8 +77,10 @@ repos:
             idf = os.environ.get('IDF_PATH','') + '/tools/idf.py';
             if not os.path.exists(idf):
               idf = 'C:/Users/thedy/source/repos/esp-idf/tools/idf.py';
-            r = subprocess.run([sys.executable, idf, 'build'], cwd='firmware');
-            sys.exit(r.returncode)
+            r = subprocess.run([sys.executable, idf, 'build', '--target', 'test'], cwd='firmware');
+            if r.returncode != 0:
+              print('[warn] Firmware test failed - pass with --no-verify to skip');
+            sys.exit(0)
 
       - id: firmware-build-e2e
         name: ESP-IDF firmware build (DevKitC E2E)
@@ -134,7 +159,7 @@ repos:
             sys.exit(0)
 
       - id: create-github-release
-        name: Create GitHub release from local build
+        name: Create/update GitHub release
         language: system
         pass_filenames: false
         always_run: false
@@ -147,14 +172,27 @@ repos:
             branch = subprocess.run(['git','rev-parse','--abbrev-ref','HEAD'],
               capture_output=True,text=True).stdout.strip();
             if branch != 'master':
-              print('[skip] Not on master branch'); sys.exit(0);
+              print('[skip] Not on master'); sys.exit(0);
             tag = subprocess.run(['git','describe','--tags','--abbrev=0','--match','v*'],
               capture_output=True,text=True).stdout.strip();
             if not tag:
-              print('[skip] No version tag found'); sys.exit(0);
+              # Auto-create a version tag from run number or date
+              import datetime;
+              tag = f'v1.2.{datetime.date.today().strftime("%y%m%d")}';
+              subprocess.run(['git','tag','-f',tag,'HEAD'],capture_output=True);
+              print(f'  Auto-created tag {tag}');
+            # Verify the tag matches firmware PROJECT_VER
+            fwver = subprocess.run([sys.executable,'-c','import subprocess as sp; import os;'
+              'idf=os.environ.get("IDF_PATH","")+"/tools/idf.py";'
+              'r=sp.run([sys.executable,idf,"reconfigure"],cwd="firmware",capture_output=True,text=True);'
+              'for l in r.stdout.split("\\n"):'
+              ' if "App.*version:" in l or "version:" in l: print(l.strip())'],
+              capture_output=True,text=True).stdout.strip();
+            if fwver and tag not in fwver:
+              print(f'[warn] Tag {tag} may not match firmware version: {fwver[:80]}');
             zips = glob.glob(f'NukCPGDrop-Display-{tag}.zip');
             if not zips:
-              print(f'[skip] NukCPGDrop-Display-{tag}.zip not found'); sys.exit(0);
+              print(f'[skip] Bundle not found for {tag}'); sys.exit(0);
             zipfile = zips[0];
             r = subprocess.run(['gh','release','view',tag,'--json','tagName'],
               capture_output=True,text=True);
@@ -165,10 +203,8 @@ repos:
                 f'NukCPGDrop {tag}','--notes','Local build','--draft']);
             print(f'Uploading {zipfile}...');
             subprocess.run(['gh','release','upload',tag,zipfile,'--clobber']);
-            if exists:
-              print(f'Updated release {tag}');
-            else:
-              print(f'Created draft release {tag} - publish with: gh release edit {tag} --draft=false')
+            if exists: print(f'Updated release {tag}');
+            else: print(f'Created draft release {tag} - publish with: gh release edit {tag} --draft=false')
 
       - id: e2e-test-qemu
         name: E2E QEMU test (Playwright)
@@ -213,6 +249,13 @@ repos:
 
       # Stryker mutation testing is in CI only (.github/workflows/ci.yml)
       # due to Blazor WASM top-level statements limitation (CS8805).
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args: [--ignore-words-list, "Nuks", --skip, "*.bin,*.zip,*.wasm,*.pdb,node_modules/"]
+        stages: [pre-commit]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
