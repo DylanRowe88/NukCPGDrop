@@ -52,7 +52,7 @@ repos:
             sys.exit(0)
 
       - id: full-pipeline
-        name: Full build pipeline (Blazor → embed → firmware)
+        name: Full pipeline: publish + embed + firmware (~20s incremental)
         language: system
         pass_filenames: false
         always_run: false

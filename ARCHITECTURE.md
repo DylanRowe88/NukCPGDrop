@@ -260,20 +260,25 @@ Playwright + Mocha tests in `tests/e2e/firmware.test.js`. Runs against
 
 All Python-based. Defined in `.pre-commit-config.yaml`.
 
-**Pre-commit (every commit):**
+**Pre-commit (every commit) — ~20s:**
 
 ```
-Full pipeline: dotnet publish → embed-web.py → idf.py build
-C# tests (13), firmware tests, codespell, clang-format,
-trailing-whitespace, EOF-fixer, check-yaml, check-added-large-files
+dotnet test (8.5s) → firmware unit tests (5.8s) → clang-format →
+dotnet format → codespell → trailing-whitespace → YAML check →
+large-file check → merge-conflict check
 ```
 
-**Pre-push:**
+**Pre-push (incremental) — ~50s:**
 
 ```
+Full pipeline: dotnet publish (11.5s) → embed-web.py (3s) →
+  incremental idf.py build (5.8s, ccache)
 DevKitC E2E build → firmware bundle → GitHub release upload →
-version consistency check → QEMU E2E → hardware E2E
+version consistency → QEMU E2E → hardware E2E
 ```
+
+Clean build (no ccache) adds ~50s for the first `idf.py build`.
+
 
 ---
 
