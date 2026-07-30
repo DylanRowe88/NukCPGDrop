@@ -1,5 +1,5 @@
 {
-  "version": "v1.1.0",
+  "version": "v1.2.0",
   "files": [
     {
       "name": "bootloader.bin",
@@ -13,8 +13,8 @@
     },
     {
       "name": "NukCPGDrop.bin",
-      "size": 3952944,
-      "md5": "1c2a8df53a0d41f028fa954db5a3dc34"
+      "size": 3954064,
+      "md5": "d5b239f12240e16123f68580d3c36d4e"
     },
     {
       "name": "ota_data_initial.bin",

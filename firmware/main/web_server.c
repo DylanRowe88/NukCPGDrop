@@ -291,15 +291,33 @@ static esp_err_t api_servo_config_handler(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
+  bool pos_changed = false;
   cJSON *sp = cJSON_GetObjectItem(json, "sv_start_pos");
-  if (cJSON_IsNumber(sp))
+  if (cJSON_IsNumber(sp)) {
     g_state.sv_start_pos = (uint16_t)sp->valuedouble;
+    pos_changed = true;
+  }
 
   cJSON *stp = cJSON_GetObjectItem(json, "sv_stop_pos");
-  if (cJSON_IsNumber(stp))
+  if (cJSON_IsNumber(stp)) {
     g_state.sv_stop_pos = (uint16_t)stp->valuedouble;
+    pos_changed = true;
+  }
 
   state_save();
+
+  // Move existing servos to new positions in real-time
+  if (pos_changed) {
+    uint8_t n = g_state.active_servos > 0 ? g_state.active_servos : SERVO_COUNT;
+    if (n > SERVO_COUNT) n = SERVO_COUNT;
+    for (int i = 0; i < n; i++) {
+      if (servos_is_held(i))
+        servos_set(i, SERVO_POSITION_HOLD);
+      else
+        servos_set(i, SERVO_POSITION_RELEASE);
+    }
+  }
+
   cJSON_Delete(json);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
