@@ -32,7 +32,7 @@ function cacheElements() {
     'result-stats','result-btn-dashboard','result-btn-again',
     'status-msg','error-details',
     'release-count','btn-refresh-releases',
-    'chip-name','chip-desc','chip-revision','chip-mac',
+    'chip-name','chip-revision','chip-mac',
     'chip-flash-size','current-fw-version',
     'selected-version-info',
     'flash-total-progress2','flash-total-label2','flash-eta',
@@ -154,7 +154,7 @@ async function connectToPort(port) {
 
   clearStatus();
   els['chip-name'].textContent = chipName;
-  els['chip-desc'].textContent = desc || chipName;
+
   const revDisplay = revision > 0 ? 'v' + revision : (desc.match(/revision\s+v?[\d.]+/i) || [''])[0] || '';
   els['chip-revision'].textContent = revDisplay || '—';
   els['chip-mac'].textContent = mac || '—';
