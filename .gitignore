@@ -31,3 +31,4 @@ tests/**/obj/
 firmware/.pio/
 
 !docs/flash/firmware/*.bin
+!docs/flash/firmware/manifest.json

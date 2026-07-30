@@ -1,0 +1,25 @@
+{
+  "version": "v1.0.9",
+  "files": [
+    {
+      "name": "bootloader.bin",
+      "size": 20848,
+      "md5": "5ef07c9b5416e1f57467c34dd32fead7"
+    },
+    {
+      "name": "partition-table.bin",
+      "size": 3072,
+      "md5": "0806fc8a473b351ebb1e7215be093ecd"
+    },
+    {
+      "name": "NukCPGDrop.bin",
+      "size": 3953216,
+      "md5": "cede130dfa2d96e96eeb4e960867b595"
+    },
+    {
+      "name": "ota_data_initial.bin",
+      "size": 8192,
+      "md5": "84d04c9d6cc8ef35bf825d51a5277699"
+    }
+  ]
+}

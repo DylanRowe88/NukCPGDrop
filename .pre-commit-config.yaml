@@ -102,6 +102,17 @@ repos:
             r = subprocess.run([sys.executable, script, 'firmware/build', out,
               '--board', 'DisplayBoard', '--version', version]);
             if r.returncode != 0: sys.exit(r.returncode);
+            # Create manifest.json for the WebSerial flasher
+            import json, hashlib;
+            mfiles = [];
+            for mf in ['bootloader.bin','partition-table.bin','NukCPGDrop.bin','ota_data_initial.bin']:
+                mp = f'docs/flash/firmware/{mf}';
+                if os.path.exists(mp):
+                    md = open(mp,'rb').read();
+                    mfiles.append({'name':mf,'size':len(md),'md5':hashlib.md5(md).hexdigest()});
+            with open('docs/flash/firmware/manifest.json','w') as mj:
+                json.dump({'version':version,'files':mfiles}, mj, indent=2);
+            print(f'  Created docs/flash/firmware/manifest.json (version {version})');
             # Move the latest tag to this commit so firmware files are accessible at the tag ref
             import glob;
             tags = sorted(glob.glob('docs/flash/firmware/*.bin'));

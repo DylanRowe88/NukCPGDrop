@@ -179,11 +179,7 @@ async function connectToPort(port) {
     clearStatus();
   }
   state.installedMd5 = installedMd5;
-  if (installedMd5) {
-    els['current-fw-version'].textContent = 'MD5: ' + installedMd5.slice(0, 16) + '...';
-  } else {
-    els['current-fw-version'].textContent = 'Unknown';
-  }
+  els['current-fw-version'].textContent = installedMd5 ? 'Hash: ' + installedMd5.slice(0, 12) + '...' : 'Unknown';
 
   await fetchReleases(installedMd5);
 }
@@ -318,6 +314,7 @@ function renderReleaseTable(releases, installedMd5) {
     return 0;
   });
   let sel = null;
+  let matchedTag = null;
   for (const tag of sorted) {
     const { release, asset } = assetMap[tag];
     const tr = document.createElement('tr');
@@ -326,6 +323,35 @@ function renderReleaseTable(releases, installedMd5) {
     tr.innerHTML = `<td><strong>${tag}</strong></td><td>${formatDate(release.published_at)}</td><td>${formatBytes(asset.size)}</td><td class="mono">${asset.name}</td>`;
     tr.addEventListener('click', () => selectRelease(tag, tr));
     tbody.appendChild(tr);
+  }
+  // Try to match installed firmware against release manifests
+  if (installedMd5) {
+    (async () => {
+      for (const tag of sorted) {
+        try {
+          const manifestUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${tag}/docs/flash/firmware/manifest.json`;
+          const resp = await fetch(manifestUrl);
+          if (!resp.ok) continue;
+          const manifest = await resp.json();
+          const appEntry = (manifest.files || []).find(f => f.name === 'NukCPGDrop.bin');
+          if (appEntry && appEntry.md5 && appEntry.md5.toLowerCase() === installedMd5.toLowerCase()) {
+            matchedTag = tag;
+            els['current-fw-version'].textContent = tag;
+            // Mark the row as installed
+            for (const row of tbody.querySelectorAll('tr')) {
+              if (row.dataset.tag === tag) {
+                row.classList.add('installed');
+                row.querySelector('td:first-child').innerHTML = `<strong>${tag}</strong><span style="font-size:0.6rem;color:var(--color-accent);display:block;text-transform:uppercase;letter-spacing:0.03em;">Installed</span>`;
+              }
+            }
+            break;
+          }
+        } catch {}
+      }
+      if (!matchedTag) {
+        els['current-fw-version'].textContent = 'Hash: ' + installedMd5.slice(0, 12) + '...';
+      }
+    })();
   }
   state.selectedRelease = sel;
   for (const row of tbody.querySelectorAll('tr')) {

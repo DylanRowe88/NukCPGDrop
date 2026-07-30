@@ -399,14 +399,10 @@ static esp_err_t captive_probe_handler(httpd_req_t *req) {
 
 static esp_err_t asset_handler(httpd_req_t *req) {
   const char *uri = req->uri;
-  // The bare "/" must serve index.html (no asset path is literally "/")
   if (strcmp(uri, "/") == 0)
-    uri = "/wwwroot/index.html";
+    uri = "/index.html";
   for (size_t i = 0; i < web_assets_count; i++) {
     if (strcmp(uri, web_assets[i].path) == 0)
-      return serve_asset(req, i);
-    if (strncmp(web_assets[i].path, "/wwwroot", 8) == 0 &&
-        strcmp(web_assets[i].path + 8, uri) == 0)
       return serve_asset(req, i);
   }
   httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not Found");
@@ -574,12 +570,13 @@ esp_err_t web_server_start(void) {
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // Root path "/" needs an explicit registration — asset_handler has the
-  // logic to rewrite it to /wwwroot/index.html but is only reached when
-  // a registered URI pattern fires.
+  // Root + wildcard for assets — avoids individual URI registration failures
   httpd_uri_t root_uri = {
       .uri = "/", .method = HTTP_GET, .handler = asset_handler};
   httpd_register_uri_handler(g_server, &root_uri);
+  httpd_uri_t wildcard = {
+      .uri = "/*", .method = HTTP_GET, .handler = asset_handler};
+  httpd_register_uri_handler(g_server, &wildcard);
 
   // Register every captive probe path as an explicit handler
   for (int i = 0; captive_probes[i]; i++) {
@@ -587,25 +584,6 @@ esp_err_t web_server_start(void) {
                          .method = HTTP_GET,
                          .handler = captive_probe_handler};
     httpd_register_uri_handler(g_server, &probe);
-  }
-
-  // Register every asset as an explicit URI handler (up to 128 slots).
-  // The embedded paths use the /wwwroot/ prefix but the browser
-  // requests paths like /css/app.css and /_framework/foo.wasm,
-  // so we register BOTH forms (with and without the prefix).
-  // Each handler calls asset_handler() which looks up the asset by URI.
-  for (size_t i = 0; i < web_assets_count; i++) {
-    httpd_uri_t a = {.uri = web_assets[i].path,
-                     .method = HTTP_GET,
-                     .handler = asset_handler};
-    httpd_register_uri_handler(g_server, &a);
-
-    if (strncmp(web_assets[i].path, "/wwwroot", 8) == 0) {
-      httpd_uri_t b = {.uri = web_assets[i].path + 8,
-                       .method = HTTP_GET,
-                       .handler = asset_handler};
-      httpd_register_uri_handler(g_server, &b);
-    }
   }
 
   ESP_LOGI(TAG, "HTTP server running on :80 (%u assets embedded)",
