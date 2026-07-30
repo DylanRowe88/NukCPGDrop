@@ -150,11 +150,11 @@
         await Api.DropAllAsync();
     }
 
-    private async Task OnRangeMinChanged(ChangeEventArgs e) { _rangeMin = int.TryParse(e.Value?.ToString(), out var v) ? v : 300; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
-    private async Task OnRangeMaxChanged(ChangeEventArgs e) { _rangeMax = int.TryParse(e.Value?.ToString(), out var v) ? v : 2000; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
+    private async Task OnRangeMinChanged(ChangeEventArgs e) { _rangeMin = int.TryParse(e.Value?.ToString(), out var v) ? v : 300; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax, ActiveServos = _activeServos }); }
+    private async Task OnRangeMaxChanged(ChangeEventArgs e) { _rangeMax = int.TryParse(e.Value?.ToString(), out var v) ? v : 2000; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax, ActiveServos = _activeServos }); }
     private async Task OnSvHeldChanged(ChangeEventArgs e) { _svHeld = int.TryParse(e.Value?.ToString(), out var v) ? v : 0; await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svHeld, sv_stop_pos = _svDropped }); }
     private async Task OnSvDroppedChanged(ChangeEventArgs e) { _svDropped = int.TryParse(e.Value?.ToString(), out var v) ? v : 180; await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svHeld, sv_stop_pos = _svDropped }); }
-    private async Task OnSoundToggled(ChangeEventArgs e) { _soundEnabled = (bool)(e.Value ?? false); await Api.UpdateConfigAsync(new DropConfiguration { SoundEnabled = _soundEnabled }); }
+    private async Task OnSoundToggled(ChangeEventArgs e) { _soundEnabled = (bool)(e.Value ?? false); await Api.UpdateConfigAsync(new DropConfiguration { SoundEnabled = _soundEnabled, ActiveServos = _activeServos }); }
     private async Task DecrementServos() { if (_activeServos > 1) { _activeServos--; await Api.UpdateConfigAsync(new DropConfiguration { ActiveServos = _activeServos }); } }
     private async Task IncrementServos() { if (_activeServos < 16) { _activeServos++; await Api.UpdateConfigAsync(new DropConfiguration { ActiveServos = _activeServos }); } }
 

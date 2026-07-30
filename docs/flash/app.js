@@ -325,22 +325,21 @@ function renderReleaseTable(releases, installedMd5) {
     tbody.appendChild(tr);
   }
   // Try to match installed firmware against release manifests
-  // Only check releases v1.0.9+ (docs/flash/firmware didn't exist before)
   if (installedMd5) {
     (async () => {
+      console.log('[MATCH] Searching for installed MD5:', installedMd5);
       for (const tag of sorted) {
-        // Skip tags before v1.0.9 (no docs/flash/firmware/)
-        const match = tag.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
-        if (match) {
-          const major = parseInt(match[1]), minor = parseInt(match[2]), patch = parseInt(match[3]);
-          if (major < 1 || (major === 1 && minor < 1)) continue; // skip v1.0.x
-        }
+        console.log('[MATCH] Checking tag:', tag);
         try {
           const manifestUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${tag}/docs/flash/firmware/manifest.json`;
+          console.log('[MATCH] Fetching:', manifestUrl);
           const resp = await fetch(manifestUrl).catch(() => null);
-          if (!resp || !resp.ok) continue;
+          if (!resp || !resp.ok) { console.log('[MATCH] No manifest for', tag, resp ? 'HTTP ' + resp.status : 'fetch failed'); continue; }
           const manifest = await resp.json();
+          console.log('[MATCH] Manifest for', tag, ':', JSON.stringify(manifest));
           const appEntry = (manifest.files || []).find(f => f.name === 'NukCPGDrop.bin');
+          const manifestMd5 = appEntry ? appEntry.md5 : 'N/A';
+          console.log('[MATCH]', tag, 'NukCPGDrop.bin MD5:', manifestMd5, '| Installed:', installedMd5);
           if (appEntry && appEntry.md5 && appEntry.md5.toLowerCase() === installedMd5.toLowerCase()) {
             matchedTag = tag;
             els['current-fw-version'].textContent = tag;
