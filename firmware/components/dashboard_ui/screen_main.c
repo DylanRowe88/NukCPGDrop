@@ -1,5 +1,4 @@
 #include "screen_main.h"
-#include "led.h"
 #include "servos.h"
 #include "state.h"
 #include "wifi_manager.h"
@@ -12,7 +11,7 @@ static const char *TAG = "screen_main";
 
 #define SCREEN_W 240
 #define SCREEN_H 320
-#define CONTENT_H 700
+#define CONTENT_H 850
 
 static lv_obj_t *main_screen = NULL;
 static lv_obj_t *scrollable = NULL;
@@ -45,7 +44,6 @@ static lv_obj_t *battery_bar = NULL;
 static lv_obj_t *battery_label = NULL;
 static lv_obj_t *version_label = NULL;
 
-static lv_obj_t *led_indicator = NULL;
 static lv_obj_t *sound_switch = NULL;
 static lv_obj_t *client_count_label = NULL;
 static lv_obj_t *audio_bar = NULL;
@@ -342,18 +340,12 @@ static void create_system_status(lv_obj_t *parent) {
   lv_label_set_text(pca9685_label, "PCA9685: --");
   lv_obj_set_style_text_color(pca9685_label, lv_color_hex(0xf0f0f0), LV_STATE_DEFAULT);
   lv_obj_set_pos(pca9685_label, 8, y + 18);
-
   client_count_label = lv_label_create(parent);
   lv_label_set_text(client_count_label, "Clients: 0");
-  lv_obj_set_style_text_color(client_count_label, lv_color_hex(0xf0f0f0), LV_STATE_DEFAULT);
+  lv_obj_set_style_text_color(client_count_label, lv_color_hex(0xf0f0f0),
+                               LV_STATE_DEFAULT);
   lv_obj_set_pos(client_count_label, 8, y + 34);
-
-  led_indicator = lv_label_create(parent);
-  lv_label_set_text(led_indicator, "LED: ---");
-  lv_obj_set_style_text_color(led_indicator, lv_color_hex(0xf0f0f0), LV_STATE_DEFAULT);
-  lv_obj_set_pos(led_indicator, 120, y + 18);
 }
-
 static void create_sound_toggle(lv_obj_t *parent) {
   int y = 48 + 4 * 50 + 4 + 18 + 40 + 12 + 18 + 24 + 24 + 16 + 18 + 24 + 24 + 8 + 18 + 36 + 16 + 18 + 34 + 16;
   create_section_label(parent, "Sound", y);
@@ -373,7 +365,7 @@ static void create_audio_level(lv_obj_t *parent) {
   int y = 48 + 4 * 50 + 4 + 18 + 40 + 12 + 18 + 24 + 24 + 16 + 18 + 24 + 24 + 8 + 18 + 36 + 16 + 18 + 34 + 16 + 18 + 24 + 16;
   create_section_label(parent, "Mic Spectrum", y);
 
-  int bar_w = 24, bar_gap = 4, bar_h = 40;
+  int bar_w = 26, bar_gap = 1, bar_h = 44;
   int start_x = (SCREEN_W - (AUDIO_BINS * (bar_w + bar_gap) - bar_gap)) / 2;
   int by = y + 18;
   for (int i = 0; i < AUDIO_BINS; i++) {
@@ -506,14 +498,6 @@ void screen_main_update_status(void) {
     }
   }
 
-  if (led_indicator) {
-    extern void led_get_color(led_color_t *c);
-    led_color_t lc;
-    led_get_color(&lc);
-    char l[24];
-    lv_snprintf(l, sizeof(l), "LED: rgb(%d,%d,%d)", lc.r, lc.g, lc.b);
-    lv_label_set_text(led_indicator, l);
-  }
 }
 
 void screen_main_update_rssi(int rssi) {

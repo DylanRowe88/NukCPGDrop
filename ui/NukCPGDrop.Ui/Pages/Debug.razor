@@ -12,84 +12,44 @@
     <section class="debug-section">
         <h2>System</h2>
         <div class="status-grid">
-            <div class="stat-row">
-                <span>Version</span>
-                <span class="stat-value">@(_status?.Wifi?.Version ?? "--")</span>
-            </div>
-            <div class="stat-row">
-                <span>Drop Count</span>
-                <span class="stat-value">@(_status?.DropCount ?? 0)</span>
-            </div>
-            <div class="stat-row">
-                <span>PCA9685</span>
-                <span class="stat-value @(_pcaOk ? "ok" : "err")">@(_pcaOk ? "Detected" : (_status == null ? "Connecting..." : "Not found"))</span>
-            </div>
-            <div class="stat-row">
-                <span>ESP</span>
-                <span class="stat-value @(_connected ? "ok" : "err")">@(_connected ? "Connected" : "Disconnected")</span>
-            </div>
-            <div class="stat-row">
-                <span>WiFi Clients</span>
-                <span class="stat-value">@(_status?.Wifi?.Clients ?? 0)</span>
-            </div>
+            <div class="stat-row"><span>Version</span><span class="stat-value">@(_status?.Wifi?.Version ?? "--")</span></div>
+            <div class="stat-row"><span>Drop Count</span><span class="stat-value">@(_status?.DropCount ?? 0)</span></div>
+            <div class="stat-row"><span>PCA9685</span><span class="stat-value @(_pcaOk ? "ok" : "err")">@(_pcaOk ? "Detected" : (_status == null ? "Connecting..." : "Not found"))</span></div>
+            <div class="stat-row"><span>ESP</span><span class="stat-value @(_connected ? "ok" : "err")">@(_connected ? "Connected" : "Disconnected")</span></div>
+            <div class="stat-row"><span>WiFi Clients</span><span class="stat-value">@(_status?.Wifi?.Clients ?? 0)</span></div>
             @if (_status?.Wifi?.ClientsList != null)
             {
                 foreach (var cl in _status.Wifi.ClientsList)
                 {
-                    <div class="stat-row client-row">
-                        <span class="client-mac">@cl.Mac</span>
-                        <span class="stat-value">@cl.Rssi dBm</span>
-                    </div>
+                    <div class="stat-row client-row"><span class="client-mac">@cl.Mac</span><span class="stat-value">@cl.Rssi dBm</span></div>
                 }
             }
-            <div class="stat-row">
-                <span>Your IP</span>
-                <span class="stat-value">@clientIp</span>
-            </div>
-            <div class="stat-row">
-                <span>RGB LED</span>
-                <span class="stat-value" style="color: @ledColor;">@(ledColor != "transparent" ? $"R={lr} G={lg} B={lb}" : "--")</span>
-            </div>
-            <div class="stat-row">
-                <span>Sound</span>
-                <span class="stat-value @(_status?.SoundEnabled == true ? "ok" : "err")">@(_status?.SoundEnabled == true ? "ON" : "OFF")</span>
-            </div>
+            <div class="stat-row"><span>Your IP</span><span class="stat-value">@clientIp</span></div>
+            <div class="stat-row"><span>Sound</span><span class="stat-value @(_status?.SoundEnabled == true ? "ok" : "err")">@(_status?.SoundEnabled == true ? "ON" : "OFF")</span></div>
         </div>
     </section>
 
     <section class="debug-section">
         <h2>WiFi</h2>
         <div class="status-grid">
-            <div class="stat-row">
-                <span>RSSI</span>
-                <span class="stat-value">@(_status?.Wifi?.Rssi ?? 0) dBm</span>
-            </div>
-            <div class="stat-row">
-                <span>Signal</span>
-                <span class="stat-value"><WifiIcon Signal="@WifiSignalLevel" Size="20px" Color="var(--accent-color, #e63946)" /></span>
-            </div>
-            <div class="stat-row">
-                <span>Clients</span>
-                <span class="stat-value">@(_status?.Wifi?.Clients ?? 0)</span>
-            </div>
+            <div class="stat-row"><span>RSSI</span><span class="stat-value">@(_status?.Wifi?.Rssi ?? 0) dBm</span></div>
+            <div class="stat-row"><span>Signal</span><span class="stat-value"><WifiIcon Signal="@WifiSignalLevel" Size="20px" Color="var(--accent-color, #e63946)" /></span></div>
+            <div class="stat-row"><span>Clients</span><span class="stat-value">@(_status?.Wifi?.Clients ?? 0)</span></div>
         </div>
     </section>
 
     <section class="debug-section">
         <h2>Servo Positions</h2>
-        <p class="section-note">Global start (held) and stop (release) positions in degrees.</p>
         <div class="servo-pos-control">
             <div class="range-row">
-                <span class="range-label">Start (held):</span>
-                <span class="range-value">@_svStartPos&deg;</span>
-                <input type="range" class="range-input" min="0" max="180" value="@_svStartPos"
-                       @onchange="OnSvStartChanged" />
+                <span class="range-label">Held:</span>
+                <span class="range-value">@_svHeld&deg;</span>
+                <input type="range" class="range-input" min="0" max="180" value="@_svHeld" @onchange="OnSvHeldChanged" />
             </div>
             <div class="range-row">
-                <span class="range-label">Stop (release):</span>
-                <span class="range-value">@_svStopPos&deg;</span>
-                <input type="range" class="range-input" min="0" max="180" value="@_svStopPos"
-                       @onchange="OnSvStopChanged" />
+                <span class="range-label">Dropped:</span>
+                <span class="range-value">@_svDropped&deg;</span>
+                <input type="range" class="range-input" min="0" max="180" value="@_svDropped" @onchange="OnSvDroppedChanged" />
             </div>
         </div>
     </section>
@@ -127,11 +87,9 @@
 
     private SystemStatus? _status;
     private bool _connected, _pcaOk;
-    private int lr, lg, lb;
-    private string ledColor = "transparent";
     private string clientIp = "--";
-    private int _svStartPos = 0;
-    private int _svStopPos = 180;
+    private int _svHeld;
+    private int _svDropped = 180;
     private bool _soundEnabled = true;
     private Timer? _pollTimer;
     private Timer? _fftTimer;
@@ -142,11 +100,7 @@
         get
         {
             int r = _status?.Wifi?.Rssi ?? -100;
-            if (r > -50) return 4;
-            if (r > -65) return 3;
-            if (r > -75) return 2;
-            if (r > -85) return 1;
-            return 0;
+            if (r > -50) return 4; if (r > -65) return 3; if (r > -75) return 2; if (r > -85) return 1; return 0;
         }
     }
 
@@ -165,9 +119,8 @@
         if (_status != null)
         {
             _pcaOk = _status.Pca9685Present;
-            if (_status.Led != null) { lr = _status.Led.R; lg = _status.Led.G; lb = _status.Led.B; ledColor = $"rgb({lr},{lg},{lb})"; }
-            _svStartPos = _status.SvStartPos;
-            _svStopPos = _status.SvStopPos;
+            _svHeld = _status.SvStartPos;
+            _svDropped = _status.SvStopPos;
             _soundEnabled = _status.SoundEnabled;
         }
         StateHasChanged();
@@ -179,8 +132,7 @@
         {
             var json = await _http.GetStringAsync(Nav.BaseUri + "api/audio/fft");
             var fft = System.Text.Json.JsonSerializer.Deserialize<FftData>(json);
-            if (fft?.Spectrum != null)
-                await DrawSpectrum(fft.Spectrum);
+            if (fft?.Spectrum != null) await DrawSpectrum(fft.Spectrum);
         }
         catch { }
     }
@@ -215,24 +167,16 @@
         catch { }
     }
 
-    private async Task OnSvStartChanged(ChangeEventArgs e)
+    private async Task OnSvHeldChanged(ChangeEventArgs e)
     {
-        _svStartPos = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
-        await SaveServoConfig();
+        _svHeld = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svHeld, sv_stop_pos = _svDropped });
     }
-
-    private async Task OnSvStopChanged(ChangeEventArgs e)
+    private async Task OnSvDroppedChanged(ChangeEventArgs e)
     {
-        _svStopPos = int.TryParse(e.Value?.ToString(), out var v) ? v : 180;
-        await SaveServoConfig();
+        _svDropped = int.TryParse(e.Value?.ToString(), out var v) ? v : 180;
+        await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svHeld, sv_stop_pos = _svDropped });
     }
-
-    private async Task SaveServoConfig()
-    {
-        try { await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svStartPos, sv_stop_pos = _svStopPos }); }
-        catch { }
-    }
-
     private async Task OnSoundToggled(ChangeEventArgs e)
     {
         _soundEnabled = (bool)(e.Value ?? false);
@@ -244,32 +188,6 @@
     private class FftData { public int[]? Spectrum { get; set; } }
 }
 
-<script>
-    window.drawSpectrum = function(b0,b1,b2,b3,b4,b5,b6,b7) {
-        var c = document.getElementById('fftCanvas');
-        if (!c) return;
-        var ctx = c.getContext('2d');
-        ctx.clearRect(0, 0, c.width, c.height);
-        var bins = [b0,b1,b2,b3,b4,b5,b6,b7];
-        var w = (c.width - 16) / 8;
-        var max = Math.max(1, Math.max.apply(null, bins));
-        for (var i = 0; i < 8; i++) {
-            var h = (bins[i] / max) * (c.height - 16);
-            var x = 8 + i * w;
-            var grad = ctx.createLinearGradient(x, c.height - 8, x, c.height - 8 - h);
-            grad.addColorStop(0, '#28a745');
-            grad.addColorStop(0.5, '#e6a700');
-            grad.addColorStop(1, '#e63946');
-            ctx.fillStyle = grad;
-            ctx.fillRect(x + 2, c.height - 8 - h, w - 4, h);
-            ctx.fillStyle = '#888';
-            ctx.font = '9px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText((i * 1000) + 'Hz', x + w/2, c.height - 1);
-        }
-    };
-</script>
-
 <style>
     .debug-shell { max-width: 600px; margin: 0 auto; padding: 1rem; }
     h1 { font-size: 1.4rem; margin-bottom: 1rem; color: var(--accent-color, #e63946); }
@@ -279,13 +197,12 @@
     .status-grid { display: flex; flex-direction: column; gap: 0.3rem; }
     .stat-row { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border-color, #333); }
     .stat-value { font-weight: 600; }
-    .stat-value.ok { color: #28a745; }
-    .stat-value.err { color: #dc3545; }
+    .stat-value.ok { color: #28a745; } .stat-value.err { color: #dc3545; }
     .client-row { font-size: 0.75rem; padding-left: 1rem; }
     .client-mac { font-family: monospace; font-size: 0.7rem; }
     .servo-pos-control { background: #1a1a1a; border-radius: 6px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
     .range-row { display: flex; align-items: center; gap: 0.5rem; }
-    .range-label { font-size: 0.85rem; min-width: 90px; }
+    .range-label { font-size: 0.85rem; min-width: 60px; }
     .range-value { font-size: 0.85rem; font-weight: 600; min-width: 45px; text-align: right; color: var(--accent-color, #e63946); }
     .range-input { flex: 1; accent-color: var(--accent-color, #e63946); }
     .sound-controls { background: #1a1a1a; border-radius: 6px; padding: 0.75rem; }

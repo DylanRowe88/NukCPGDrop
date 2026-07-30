@@ -10,15 +10,48 @@
     </div>
 
     <div class="main-controls">
-        <DifficultySelector
-            Interval="@_interval"
-            RandomEnabled="@_randomEnabled"
-            RangeMin="@_rangeMin"
-            RangeMax="@_rangeMax"
-            IntervalChanged="OnIntervalChangedAsync"
-            OnRandomToggled="OnRandomToggledAsync"
-            RangeChanged="OnRangeChangedAsync" />
 
+        @* Interval Range (always random) *@
+        <div class="control-group">
+            <div class="range-row">
+                <span class="range-label">Min Interval</span>
+                <span class="range-value">@_rangeMin ms</span>
+                <input type="range" class="range-slider" min="100" max="5000" value="@_rangeMin"
+                       @onchange="OnRangeMinChanged" />
+            </div>
+            <div class="range-row">
+                <span class="range-label">Max Interval</span>
+                <span class="range-value">@_rangeMax ms</span>
+                <input type="range" class="range-slider" min="100" max="5000" value="@_rangeMax"
+                       @onchange="OnRangeMaxChanged" />
+            </div>
+        </div>
+
+        @* Servo Positions *@
+        <div class="control-group">
+            <div class="range-row">
+                <span class="range-label">Held</span>
+                <span class="range-value">@_svHeld&deg;</span>
+                <input type="range" class="range-slider" min="0" max="180" value="@_svHeld"
+                       @onchange="OnSvHeldChanged" />
+            </div>
+            <div class="range-row">
+                <span class="range-label">Dropped</span>
+                <span class="range-value">@_svDropped&deg;</span>
+                <input type="range" class="range-slider" min="0" max="180" value="@_svDropped"
+                       @onchange="OnSvDroppedChanged" />
+            </div>
+        </div>
+
+        @* Servo Count *@
+        <div class="servo-count-row">
+            <button class="cnt-btn" @onclick="DecrementServos">-</button>
+            <span class="cnt-value">@_activeServos</span>
+            <button class="cnt-btn" @onclick="IncrementServos">+</button>
+            <span class="cnt-label">servos</span>
+        </div>
+
+        @* Drop / Reset button *@
         @if (_allHeld)
         {
             <DropButton Label="DROP ALL"
@@ -34,36 +67,48 @@
                         OnClick="ResetAll" />
         }
 
+        @* Progress *@
         @if (_isRunning)
         {
             <div class="sequence-progress">
                 <div class="progress-bar">
-                    <div class="progress-fill"
-                         style="width: @($"{ProgressPercent}%")"></div>
+                    <div class="progress-fill" style="width: @($"{ProgressPercent}%")"></div>
                 </div>
-                <span class="progress-label">@(_dropCount)/16</span>
+                <span class="progress-label">@(_dropCount)/@_activeServos</span>
             </div>
         }
 
-        <DropStatus Held="@(_status?.Held ?? new bool[16])"
-                    DroppingIndex="@_droppingIndex"
-                    SequenceActive="@_isRunning"
-                    OnToggleCan="@HandleToggleCan" />
+        @* Can grid *@
+        <div class="drop-status-grid">
+            @for (int i = 0; i < _activeServos; i++)
+            {
+                var idx = i;
+                <div class="can-slot @(_status?.Held != null && idx < _status.Held.Length && _status.Held[idx] ? "held" : "dropped")"
+                     @onclick="() => HandleToggleCan(idx)">
+                    <span class="can-number">@(idx + 1)</span>
+                    <span class="can-state">@(_status?.Held != null && idx < _status.Held.Length && _status.Held[idx] ? "\u25CF" : "\u25CB")</span>
+                </div>
+            }
+        </div>
+
+        @* Sound *@
+        <label class="toggle-row">
+            <span>Sound</span>
+            <label class="switch">
+                <input type="checkbox" checked="@(_status?.SoundEnabled ?? true)" @onchange="OnSoundToggled" />
+                <span class="slider"></span>
+            </label>
+        </label>
+
     </div>
 
     <div class="status-bar">
         <span>Drops: @TotalDrops</span>
+        <span>Clients: @(_status?.Wifi?.Clients ?? 0)</span>
         <span class="rssi-indicator" title="RSSI: @(_status?.Wifi?.Rssi ?? 0) dBm">
             <WifiIcon Signal="@WifiSignalLevel" Size="16px" Color="var(--accent-color, #e63946)" InactiveOpacity="0.15" />
         </span>
-        <div class="status-right">
-            @if (_status?.Led != null)
-            {
-                <span class="led-twin" title="RGB LED"
-                      style="background: rgb(@_status.Led.R, @_status.Led.G, @_status.Led.B);"></span>
-            }
-            <a href="/debug" class="debug-link">Debug</a>
-        </div>
+        <a href="/debug" class="debug-link">Debug</a>
     </div>
 </div>
 
@@ -73,31 +118,24 @@
 
     private SystemStatus? _status;
     private bool _isRunning;
-    private bool _connected;
-    private bool _pca9685Ok;
     private bool _allHeld = true;
-    private int _droppingIndex = -1;
     private int _dropCount;
-    private int _interval = 2000;
-    private bool _randomEnabled;
     private int _rangeMin = 300;
     private int _rangeMax = 2000;
+    private int _svHeld;
+    private int _svDropped = 180;
+    private int _activeServos = 16;
     private Timer? _pollTimer;
 
     private int TotalDrops => _status?.DropCount ?? 0;
-    private bool allHeld => _status?.Held.All(h => h) ?? true;
-    private double ProgressPercent => Math.Min(100, _dropCount / 16.0 * 100);
+    private double ProgressPercent => _activeServos > 0 ? Math.Min(100, _dropCount / (double)_activeServos * 100) : 0;
 
     private int WifiSignalLevel
     {
         get
         {
             int r = _status?.Wifi?.Rssi ?? -100;
-            if (r > -50) return 4;
-            if (r > -65) return 3;
-            if (r > -75) return 2;
-            if (r > -85) return 1;
-            return 0;
+            if (r > -50) return 4; if (r > -65) return 3; if (r > -75) return 2; if (r > -85) return 1; return 0;
         }
     }
 
@@ -111,85 +149,114 @@
     {
         SystemStatus? prev = _status;
         _status = await Api.GetStatusAsync();
-        _connected = _status != null;
-
         if (_status != null)
         {
-            _pca9685Ok = _status.Pca9685Present;
             _allHeld = _status.Held.All(h => h);
-
+            _rangeMin = _status.RangeMin;
+            _rangeMax = _status.RangeMax;
+            _svHeld = _status.SvStartPos;
+            _svDropped = _status.SvStopPos;
+            _activeServos = _status.ActiveServos > 0 ? _status.ActiveServos : 16;
             if (prev != null)
             {
                 int droppedNow = 0;
-                for (int i = 0; i < 16; i++)
-                    if (prev.Held[i] && !_status.Held[i]) droppedNow++;
-
-                if (droppedNow > 0)
-                {
-                    _isRunning = true;
-                    _dropCount += droppedNow;
-                    for (int i = 0; i < 16; i++)
-                        if (prev.Held[i] && !_status.Held[i])
-                            _ = AnimateDrop(i);
-                }
-
+                for (int i = 0; i < _status.Held.Length; i++)
+                    if (i < prev.Held.Length && prev.Held[i] && !_status.Held[i]) droppedNow++;
+                if (droppedNow > 0) { _isRunning = true; _dropCount += droppedNow; }
                 int heldCount = _status.Held.Count(h => h);
-                if (heldCount == 0 || _dropCount >= 16)
-                {
-                    _isRunning = false;
-                    _dropCount = 0;
-                    _droppingIndex = -1;
-                }
+                if (heldCount == 0 || _dropCount >= _activeServos) { _isRunning = false; _dropCount = 0; }
             }
         }
         State.NotifyStateChanged();
         StateHasChanged();
     }
 
-    private async Task AnimateDrop(int idx) { _droppingIndex = idx; StateHasChanged(); await Task.Delay(500); if (_droppingIndex == idx) _droppingIndex = -1; }
-
     private async Task HandleToggleCan(int idx)
     {
         if (_status == null || idx >= _status.Held.Length) return;
-        bool wasHeld = _status.Held[idx];
-        if (wasHeld) await Api.DropOneAsync(idx + 1); else await Api.HoldOneAsync(idx + 1);
-        await Task.Delay(100);
-        await RefreshStatus();
+        if (_status.Held[idx]) await Api.DropOneAsync(idx + 1); else await Api.HoldOneAsync(idx + 1);
+        await Task.Delay(100); await RefreshStatus();
     }
 
-    private async Task ResetAll()
-    {
-        await Api.ResetAllAsync();
-        _dropCount = 0; _droppingIndex = -1; _isRunning = false;
-        await RefreshStatus();
-    }
+    private async Task ResetAll() { await Api.ResetAllAsync(); _dropCount = 0; _isRunning = false; await RefreshStatus(); }
 
     private async Task StartDrop()
     {
         _isRunning = true; _dropCount = 0;
-        var c = new DropConfiguration { Difficulty = _randomEnabled ? Difficulty.Random : Difficulty.Short, CustomInterval = _randomEnabled ? 0 : _interval, RangeMin = _rangeMin, RangeMax = _rangeMax };
-        await Api.UpdateConfigAsync(c);
-        await Api.DropAllAsync();
+        var c = new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax, ActiveServos = _activeServos, SvStartPos = _svHeld, SvStopPos = _svDropped, SoundEnabled = _status?.SoundEnabled ?? true };
+        await Api.UpdateConfigAsync(c); await Api.DropAllAsync();
     }
 
-    private async Task OnIntervalChangedAsync(int v) { _interval = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Short, CustomInterval = v }); }
-    private async Task OnRandomToggledAsync(bool v) { _randomEnabled = v; await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = v ? Difficulty.Random : Difficulty.Short, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
-    private async Task OnRangeChangedAsync((int Min, int Max) r) { _rangeMin = r.Min; _rangeMax = r.Max; if (_randomEnabled) await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax }); }
+    private async Task OnRangeMinChanged(ChangeEventArgs e)
+    {
+        _rangeMin = int.TryParse(e.Value?.ToString(), out var v) ? v : 300;
+        await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax });
+    }
+    private async Task OnRangeMaxChanged(ChangeEventArgs e)
+    {
+        _rangeMax = int.TryParse(e.Value?.ToString(), out var v) ? v : 2000;
+        await Api.UpdateConfigAsync(new DropConfiguration { Difficulty = Difficulty.Random, RangeMin = _rangeMin, RangeMax = _rangeMax });
+    }
+    private async Task OnSvHeldChanged(ChangeEventArgs e)
+    {
+        _svHeld = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svHeld, sv_stop_pos = _svDropped });
+    }
+    private async Task OnSvDroppedChanged(ChangeEventArgs e)
+    {
+        _svDropped = int.TryParse(e.Value?.ToString(), out var v) ? v : 180;
+        await Api.PostAsync("/api/servo_config", new { sv_start_pos = _svHeld, sv_stop_pos = _svDropped });
+    }
+    private async Task OnSoundToggled(ChangeEventArgs e)
+    {
+        bool enabled = (bool)(e.Value ?? false);
+        await Api.UpdateConfigAsync(new DropConfiguration { SoundEnabled = enabled });
+    }
+    private async Task DecrementServos()
+    {
+        if (_activeServos > 1) { _activeServos--; await Api.UpdateConfigAsync(new DropConfiguration { ActiveServos = _activeServos }); }
+    }
+    private async Task IncrementServos()
+    {
+        if (_activeServos < 16) { _activeServos++; await Api.UpdateConfigAsync(new DropConfiguration { ActiveServos = _activeServos }); }
+    }
+
     public void Dispose() => _pollTimer?.Dispose();
 }
 
 <style>
     .app-shell { max-width: 480px; margin: 0 auto; padding: clamp(0.5rem, 3vw, 2rem); min-height: 100dvh; display: flex; flex-direction: column; }
     .logo-bar { background: linear-gradient(180deg, #1a1a1a 0%, var(--bg-color, #0d0d0d) 100%); border-bottom: 1px solid var(--border-color, #333); margin: -0.5rem -2rem 0; padding: 0.5rem 2rem 0; width: calc(100% + 4rem); }
-    .main-controls { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 0.75rem; }
+    .main-controls { flex: 1; display: flex; flex-direction: column; gap: 0.6rem; }
+    .control-group { background: #1a1a1a; border-radius: 6px; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
+    .range-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+    .range-label { min-width: 65px; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.7rem; }
+    .range-value { min-width: 55px; text-align: right; color: var(--accent-color, #e63946); font-weight: 600; font-size: 0.75rem; }
+    .range-slider { flex: 1; accent-color: var(--accent-color, #e63946); height: 4px; }
+    .servo-count-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.3rem 0; }
+    .cnt-btn { width: 36px; height: 32px; border: 1px solid var(--accent-color, #e63946); border-radius: 6px; background: transparent; color: var(--accent-color, #e63946); font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .cnt-btn:hover { background: var(--accent-color, #e63946); color: #fff; }
+    .cnt-value { font-size: 1.1rem; font-weight: 700; min-width: 24px; text-align: center; }
+    .cnt-label { font-size: 0.75rem; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.05em; }
     .sequence-progress { display: flex; align-items: center; gap: 0.75rem; }
     .progress-bar { flex: 1; height: 8px; background: var(--border-color, #333); border-radius: 4px; overflow: hidden; }
     .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-color, #e63946), #c1121f); border-radius: 4px; transition: width 0.3s ease; }
     .progress-label { font-size: clamp(0.75rem, 2vw, 0.9rem); color: var(--text-muted, #888); min-width: 2rem; text-align: right; }
-    .status-bar { display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; font-size: clamp(0.65rem, 1.8vw, 0.8rem); color: var(--text-muted, #888); }
-    .status-right { display: flex; align-items: center; gap: 0.5rem; }
-    .rssi-indicator { font-size: clamp(0.7rem, 1.5vw, 0.85rem); letter-spacing: 1px; cursor: default; }
-    .led-twin { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid #555; transition: background 0.3s; }
+    .drop-status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin: 0.3rem 0; }
+    .can-slot { display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0.3rem; border-radius: 8px; background: var(--slot-bg, #1a1a1a); transition: background 0.3s, transform 0.3s; cursor: pointer; user-select: none; }
+    .can-slot:hover { filter: brightness(1.3); }
+    .can-slot.held { background: var(--held-bg, #1a3a1a); box-shadow: 0 0 6px rgba(40, 167, 69, 0.3); }
+    .can-slot.dropped { background: var(--dropped-bg, #3a1a1a); transform: translateY(4px); opacity: 0.7; }
+    .can-number { font-size: clamp(0.7rem, 2vw, 0.85rem); font-weight: 600; }
+    .can-state { font-size: clamp(1rem, 2.5vw, 1.3rem); line-height: 1; }
+    .toggle-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 0.85rem; }
+    .switch { position: relative; width: 44px; height: 24px; display: inline-block; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; background: #444; border-radius: 24px; transition: 0.3s; }
+    .slider::before { content: ''; position: absolute; left: 3px; bottom: 3px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: 0.3s; }
+    .switch input:checked + .slider { background: #28a745; }
+    .switch input:checked + .slider::before { transform: translateX(20px); }
+    .status-bar { display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; font-size: clamp(0.6rem, 1.5vw, 0.75rem); color: var(--text-muted, #888); }
     .debug-link { color: var(--text-muted, #555); text-decoration: none; font-size: clamp(0.55rem, 1.5vw, 0.7rem); text-transform: uppercase; letter-spacing: 0.1em; }
     .debug-link:hover { color: var(--accent-color, #e63946); }
 </style>
