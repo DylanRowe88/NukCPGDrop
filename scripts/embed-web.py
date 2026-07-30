@@ -35,6 +35,12 @@ def make_c_bytes(data):
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else "ui/NukCPGDrop.Ui/publish/wwwroot"
     out = sys.argv[2] if len(sys.argv) > 2 else "firmware/main/include/web_assets.h"
+    version = sys.argv[3] if len(sys.argv) > 3 else "dev"
+    # Write version.json into wwwroot so Blazor can check firmware version
+    import json
+    with open(os.path.join(root, "version.json"), "w") as vf:
+        json.dump({"version": version}, vf)
+    print(f"  Version {version} -> {root}/version.json")
 
     assets = []
     data_sections = []
