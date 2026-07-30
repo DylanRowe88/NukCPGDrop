@@ -110,12 +110,12 @@ async function connectToPort(port) {
   const transport = new Transport(port, true);
   state.transport = transport;
   // Suppress esptool-js TRACE debug output
-  // Suppress esptool-js TRACE debug by filtering out binary-hex logs
-  const origDebug = console.debug;
-  console.debug = function() {
+  // Suppress esptool-js TRACE messages (they use console.log with 'TRACE' prefix)
+  const origLog = console.log;
+  console.log = function() {
     const msg = arguments[0] || '';
-    if (typeof msg === 'string' && (msg.startsWith('TRACE') || msg.includes('bytes:'))) return;
-    origDebug.apply(console, arguments);
+    if (typeof msg === 'string' && (msg === 'TRACE' || msg.startsWith('TRACE '))) return;
+    origLog.apply(console, arguments);
   };
   const loader = new ESPLoader({
     transport, baudrate: 115200,

@@ -570,13 +570,18 @@ esp_err_t web_server_start(void) {
   for (size_t i = 0; i < sizeof(api_uris) / sizeof(api_uris[0]); i++)
     httpd_register_uri_handler(g_server, &api_uris[i]);
 
-  // Root + wildcard for assets — avoids individual URI registration failures
+  // Root handler
   httpd_uri_t root_uri = {
       .uri = "/", .method = HTTP_GET, .handler = asset_handler};
   httpd_register_uri_handler(g_server, &root_uri);
-  httpd_uri_t wildcard = {
-      .uri = "/*", .method = HTTP_GET, .handler = asset_handler};
-  httpd_register_uri_handler(g_server, &wildcard);
+
+  // Register every asset as an explicit URI handler
+  for (size_t i = 0; i < web_assets_count; i++) {
+    httpd_uri_t a = {.uri = web_assets[i].path,
+                     .method = HTTP_GET,
+                     .handler = asset_handler};
+    httpd_register_uri_handler(g_server, &a);
+  }
 
   // Register every captive probe path as an explicit handler
   for (int i = 0; captive_probes[i]; i++) {
